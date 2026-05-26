@@ -1,4 +1,4 @@
-# ECtHR-NPD Code/Data Release 20260526
+# ECtHR-NPD Code/Data Release
 
 This bundle packages the public artifacts for ECtHR-NPD: the dataset
 release, shared data loader, baseline code, prompt templates, latest
