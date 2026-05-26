@@ -1,0 +1,68 @@
+{
+  "type": "object",
+  "properties": {
+    "award_eur": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "const": 0
+        },
+        {
+          "type": "integer",
+          "minimum": 500
+        }
+      ],
+      "description": "Predicted case-level non-pecuniary damages award in original EUR scale. Use exactly 0 for zero awards; otherwise use an integer of at least 500."
+    },
+    "reasoning_summary": {
+      "type": "string",
+      "maxLength": 900,
+      "description": "Brief calibration rationale based only on visible target input and provided train references. Do not mention hidden awards, Article 41 text, claims, or external lookup."
+    },
+    "zero_award_assessment": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Brief assessment of why 0 EUR is or is not appropriate."
+    },
+    "calibration_band_eur": {
+      "type": "string",
+      "maxLength": 80,
+      "description": "Numeric EUR band, e.g. '3000-8000 EUR; select 5000 EUR' or '0-0 EUR; select 0 EUR'."
+    },
+    "used_reference_itemids": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "string",
+        "maxLength": 32
+      },
+      "description": "At most five train reference item IDs actually used for calibration."
+    },
+    "recognized_target_case": {
+      "type": "boolean",
+      "description": "Whether the model recognized the target case from memory."
+    },
+    "recalled_target_amount_eur": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Any recalled target award amount, only for audit. Must not be used for award_eur."
+    }
+  },
+  "required": [
+    "award_eur",
+    "reasoning_summary",
+    "zero_award_assessment",
+    "calibration_band_eur",
+    "used_reference_itemids",
+    "recognized_target_case",
+    "recalled_target_amount_eur"
+  ],
+  "additionalProperties": false
+}

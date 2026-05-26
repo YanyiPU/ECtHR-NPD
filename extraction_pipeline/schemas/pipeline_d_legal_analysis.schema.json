@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["itemid", "legal_analysis"],
+  "properties": {
+    "itemid": {
+      "type": "string"
+    },
+    "legal_analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "violated_articles_analyzed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of articles discussed in THE LAW section that were found to be violated"
+        },
+        "legal_tests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["article", "test_description", "test_components", "applied"],
+            "properties": {
+              "article": {
+                "type": "string"
+              },
+              "test_description": {
+                "type": ["string", "null"],
+                "description": "Brief description of the legal test applied"
+              },
+              "test_components": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Key components of the legal test (e.g., 'necessary in democratic society', 'legitimate aim')"
+              },
+              "applied": {
+                "type": "boolean",
+                "description": "Whether the court explicitly applied this test"
+              }
+            }
+          }
+        },
+        "proportionality": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "discussed": {
+              "type": "boolean"
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["legality", "legitimate_aim", "necessary", "proportionality_strict", "unclear"]
+              },
+              "description": "Proportionality analysis steps explicitly performed"
+            },
+            "result": {
+              "type": ["string", "null"],
+              "enum": ["satisfied", "failed", "not_applicable", "unclear", null]
+            }
+          }
+        },
+        "margin_of_appreciation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "referenced": {
+              "type": "boolean"
+            },
+            "width": {
+              "type": ["string", "null"],
+              "enum": ["broad", "narrow", "very_narrow", "not_applicable", "unclear", null]
+            },
+            "domain": {
+              "type": ["string", "null"],
+              "description": "Policy domain where MOA was applied (e.g., 'privacy', 'expression', 'family_life')"
+            }
+          }
+        },
+        "nature_of_obligation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "article": {
+              "type": ["string", "null"]
+            },
+            "obligation_type": {
+              "type": ["string", "null"],
+              "enum": ["negative", "positive", "procedural", "both", "unclear", null]
+            },
+            "structural_failure": {
+              "type": ["boolean", "null"],
+              "description": "Whether court found a systemic or structural failure by the state"
+            }
+          }
+        },
+        "subsidiarity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "discussed": {
+              "type": "boolean"
+            },
+            "domestic_remedies_exhausted": {
+              "type": ["boolean", "null"],
+              "description": "Whether court found domestic remedies were properly exhausted"
+            },
+            "subsidiarity_analysis_depth": {
+              "type": ["string", "null"],
+              "enum": ["extensive", "brief", "none", "unclear", null]
+            }
+          }
+        },
+        "precedent_usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "citation_count": {
+              "type": ["integer", "null"]
+            },
+            "grand_chamber_citations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "distinguished": {
+              "type": "boolean"
+            },
+            "new_principle_established": {
+              "type": ["boolean", "null"]
+            }
+          }
+        },
+        "reasoning_quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reasoning_depth": {
+              "type": ["string", "null"],
+              "enum": ["extensive", "moderate", "minimal", "unclear", null],
+              "description": "Depth of legal reasoning in THE LAW section"
+            },
+            "quantitative_reasoning": {
+              "type": ["boolean", "null"],
+              "description": "Whether the court used quantitative or statistical reasoning"
+            }
+          }
+        }
+      }
+    }
+  }
+}

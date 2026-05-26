@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "award_eur": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Original-scale non-negative EUR amount. Typical non-pecuniary awards often fall between 0 and 100,000 EUR, with larger amounts possible in exceptional cases."
+    }
+  },
+  "required": [
+    "award_eur"
+  ],
+  "additionalProperties": false
+}

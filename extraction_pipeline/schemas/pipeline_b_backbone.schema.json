@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["itemid", "facts_procedure"],
+  "properties": {
+    "itemid": { "type": "string" },
+    "facts_procedure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_applicants", "is_joint_application", "applicants", "status", "is_indirect_victim", "deterministic_notes"],
+      "properties": {
+        "num_applicants": { "type": ["integer", "null"], "minimum": 1 },
+        "is_joint_application": { "type": ["boolean", "null"] },
+        "applicants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["applicant_index", "beneficiary_label", "birth_year", "sex", "age_group", "nationality"],
+            "properties": {
+              "applicant_index": { "type": ["integer", "null"], "minimum": 1 },
+              "beneficiary_label": { "type": ["string", "null"] },
+              "birth_year": { "type": ["integer", "null"] },
+              "sex": { "type": ["string", "null"], "enum": ["male", "female", "mixed", "unknown", null] },
+              "age_group": { "type": ["string", "null"], "enum": ["child", "adolescent", "adult", "elderly", "unknown", null] },
+              "nationality": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["is_represented"],
+          "properties": {
+            "is_represented": { "type": ["boolean", "null"] }
+          }
+        },
+        "is_indirect_victim": { "type": ["boolean", "null"] },
+        "deterministic_notes": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

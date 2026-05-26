@@ -1,0 +1,13 @@
+{
+  "input_contract": "same strict input boundary as zero-shot prompting",
+  "method": "chain-of-thought prompting",
+  "relaxed_ablation": "prompts/cot/static_cot_claimaware_prompt.md is claim-aware and must be reported separately",
+  "schemas": [
+    "prompts/cot/static_cot_schema.json",
+    "prompts/cot/static_cot_serialized_features_schema.json"
+  ],
+  "templates": [
+    "prompts/cot/static_cot_prompt.md",
+    "prompts/cot/static_cot_serialized_features_prompt.md"
+  ]
+}

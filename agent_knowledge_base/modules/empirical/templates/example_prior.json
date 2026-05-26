@@ -1,0 +1,20 @@
+{
+  "module_type": "empirical",
+  "bucket": "article_state_limb",
+  "article": "6",
+  "state": "ROU",
+  "limb": "civil",
+  "sample_count": 148,
+  "zero_rate": 0.22,
+  "median": 3000.0,
+  "iqr": 2000.0,
+  "p10": 0.0,
+  "p90": 7500.0,
+  "source_split": "train",
+  "fallback_used": false,
+  "fallback_from": null,
+  "notes": [
+    "Illustrative example only",
+    "Replace with real train-split priors"
+  ]
+}

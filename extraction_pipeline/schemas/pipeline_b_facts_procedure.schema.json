@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["itemid", "facts_procedure"],
+  "properties": {
+    "itemid": { "type": "string" },
+    "facts_procedure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "num_applicants",
+        "is_joint_application",
+        "applicants",
+        "status",
+        "prior_cases",
+        "is_indirect_victim",
+        "applicant_contribution",
+        "duration_months",
+        "is_repetitive_case",
+        "is_pilot_judgment",
+        "admissibility_decision_date",
+        "partial_admissibility",
+        "complaints_summary",
+        "legal_aid_from_coe",
+        "pilot_judgment_procedure",
+        "courts_involved",
+        "domestic_duration_months",
+        "domestic_award_prior",
+        "domestic_award_prior_eur",
+        "state_remedial_measures"
+      ],
+      "properties": {
+        "num_applicants": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "is_joint_application": { "type": ["boolean", "null"] },
+        "applicants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "applicant_index",
+              "beneficiary_label",
+              "birth_year",
+              "sex",
+              "age_group",
+              "nationality"
+            ],
+            "properties": {
+              "applicant_index": { "type": ["integer", "null"], "minimum": 1 },
+              "beneficiary_label": { "type": ["string", "null"] },
+              "birth_year": { "type": ["integer", "null"] },
+              "sex": {
+                "type": ["string", "null"],
+                "enum": ["male", "female", "mixed", "unknown", null]
+              },
+              "age_group": {
+                "type": ["string", "null"],
+                "enum": ["child", "adolescent", "adult", "elderly", "unknown", null]
+              },
+              "nationality": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["is_vulnerable", "vulnerability_tags", "is_represented"],
+          "properties": {
+            "is_vulnerable": { "type": ["boolean", "null"] },
+            "vulnerability_tags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "minor",
+                  "detained",
+                  "disabled",
+                  "refugee",
+                  "asylum_seeker",
+                  "medical_vulnerability",
+                  "elderly_dependent",
+                  "victim_of_violence"
+                ]
+              }
+            },
+            "is_represented": { "type": ["boolean", "null"] }
+          }
+        },
+        "prior_cases": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["is_repeated", "count"],
+          "properties": {
+            "is_repeated": { "type": ["boolean", "null"] },
+            "count": { "type": ["integer", "null"], "minimum": 1 }
+          }
+        },
+        "is_indirect_victim": { "type": ["boolean", "null"] },
+        "applicant_contribution": { "type": ["string", "null"] },
+        "duration_months": { "type": ["number", "null"] },
+        "is_repetitive_case": { "type": ["boolean", "null"] },
+        "is_pilot_judgment": { "type": ["boolean", "null"] },
+        "admissibility_decision_date": { "type": ["string", "null"] },
+        "partial_admissibility": { "type": ["boolean", "null"] },
+        "complaints_summary": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["article", "theme"],
+            "properties": {
+              "article": { "type": ["string", "null"] },
+              "theme": { "type": "string" }
+            }
+          }
+        },
+        "legal_aid_from_coe": { "type": ["boolean", "null"] },
+        "pilot_judgment_procedure": { "type": ["boolean", "null"] },
+        "courts_involved": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "first_instance",
+              "appeal",
+              "supreme",
+              "constitutional",
+              "administrative",
+              "military",
+              "unknown"
+            ]
+          }
+        },
+        "domestic_duration_months": { "type": ["number", "null"] },
+        "domestic_award_prior": { "type": ["boolean", "null"] },
+        "domestic_award_prior_eur": { "type": ["number", "null"] },
+        "state_remedial_measures": { "type": ["boolean", "null"] }
+      }
+    }
+  }
+}

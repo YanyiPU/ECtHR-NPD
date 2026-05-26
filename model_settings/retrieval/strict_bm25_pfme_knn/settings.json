@@ -1,0 +1,139 @@
+{
+  "aggregators": [
+    "mean",
+    "median"
+  ],
+  "backend": "bm25s",
+  "baseline": "BM25 PFME-KNN",
+  "bm25_package": "bm25s",
+  "bm25_package_version": "0.3.8",
+  "bm25s_package_version": "0.3.8",
+  "candidate_extra": 1000,
+  "candidate_multiplier": 50,
+  "created_at": "2026-05-10T22:04:36Z",
+  "document_source": "KB.assemble_payload(...)[case_inputs] without itemid",
+  "document_stats": {
+    "test": {
+      "documents": 2897,
+      "empty_documents": 0,
+      "mean_tokens": 1991.8853986882982,
+      "median_tokens": 1100.0
+    },
+    "train": {
+      "documents": 10217,
+      "empty_documents": 0,
+      "mean_tokens": 2517.728295977293,
+      "median_tokens": 1444.0
+    },
+    "val": {
+      "documents": 1461,
+      "empty_documents": 0,
+      "mean_tokens": 2625.2765229295005,
+      "median_tokens": 1819.0
+    }
+  },
+  "eval_splits": [
+    "val",
+    "test"
+  ],
+  "excluded_case_input_keys": [
+    "itemid",
+    "article41_structured_hints"
+  ],
+  "included_case_input_keys": [
+    "procedure_facts_text",
+    "oracle_violated_articles",
+    "metadata",
+    "extracted_hints",
+    "external_factors"
+  ],
+  "input_policy": "strict metadata/articles/procedure-facts/external-factors, Article-41-free",
+  "k_grid": [
+    1,
+    3,
+    5,
+    10,
+    15,
+    20,
+    25,
+    30
+  ],
+  "max_query_terms": 512,
+  "mode": "strict_procedure_facts_plus_metadata_extracted",
+  "n_threads": -1,
+  "positive_threshold_eur": 0.5,
+  "query_token_policy": "deduplicate query tokens before BM25 scoring, then cap to max_query_terms; document term frequencies are preserved",
+  "rank_bm25_package_version": "0.2.2",
+  "release_input_contract": {
+    "case_facts": "strict Article-41-free text or serialized strict inputs",
+    "external_factors": "respondent-state/year economic covariates may be serialized by itemid",
+    "safe_metadata": true,
+    "strict_exclusions": [
+      "Article 41/Article 50 compensation text",
+      "operative award clauses",
+      "claimed amounts",
+      "direct award snippets",
+      "target-derived fields"
+    ],
+    "violated_articles": true
+  },
+  "retrieval_corpus_rows_by_eval_split": {
+    "test": 10217,
+    "val": 10217
+  },
+  "retrieval_stats_by_eval_split": {
+    "test": {
+      "backend": "bm25s",
+      "candidate_k": 1500,
+      "corpus_documents": 10217,
+      "full_corpus_rescue_queries": 0,
+      "max_query_terms": 512,
+      "queries": 2897,
+      "truncated_queries": 688,
+      "unique_query_terms": {
+        "max": 3543,
+        "mean": 425.9382119433897,
+        "median": 355.0,
+        "p95": 1008.5999999999995
+      },
+      "used_query_terms": {
+        "max": 512,
+        "mean": 347.8729720400414,
+        "median": 355.0,
+        "p95": 512.0
+      }
+    },
+    "val": {
+      "backend": "bm25s",
+      "candidate_k": 1500,
+      "corpus_documents": 10217,
+      "full_corpus_rescue_queries": 0,
+      "max_query_terms": 512,
+      "queries": 1461,
+      "truncated_queries": 701,
+      "unique_query_terms": {
+        "max": 4552,
+        "mean": 578.5592060232717,
+        "median": 493.0,
+        "p95": 1270.0
+      },
+      "used_query_terms": {
+        "max": 512,
+        "mean": 407.4154688569473,
+        "median": 493.0,
+        "p95": 512.0
+      }
+    }
+  },
+  "smoke": false,
+  "split_rows": {
+    "test": 2897,
+    "train": 10217,
+    "val": 1461
+  },
+  "target": "y_amount_eur",
+  "temporal_filter": "candidate_judgement_date < target_judgement_date",
+  "test_corpus": "train",
+  "test_set_excluded_from_corpus": true,
+  "validation_corpus": "train"
+}

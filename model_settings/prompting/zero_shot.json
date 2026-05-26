@@ -1,0 +1,18 @@
+{
+  "input_contract": "safe metadata, violated articles, case facts text or serialized strict inputs, and external factors when serialized",
+  "method": "zero-shot prompting",
+  "schemas": [
+    "prompts/zero_shot/vanilla_single_call_schema.json"
+  ],
+  "strict_exclusions": [
+    "Article 41/Article 50 compensation text",
+    "operative award clauses",
+    "claimed amounts",
+    "award snippets",
+    "target-derived fields"
+  ],
+  "templates": [
+    "prompts/zero_shot/vanilla_single_call_prompt.md",
+    "prompts/zero_shot/vanilla_serialized_features_prompt.md"
+  ]
+}

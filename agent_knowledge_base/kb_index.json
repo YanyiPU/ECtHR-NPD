@@ -1,0 +1,293 @@
+{
+  "kb_name": "npd_prediction_knowledge_base_v3_agentic_award_redacted",
+  "version": "0.4.0",
+  "modes": [
+    "award_redacted_full_info"
+  ],
+  "modules": [
+    {
+      "module_id": "react_action_protocol",
+      "path": "modules/policy/react_action_protocol.md",
+      "module_type": "policy",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "system_policy",
+      "path": "modules/policy/system_policy.md",
+      "module_type": "policy",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "mode_contracts",
+      "path": "modules/policy/mode_contracts.md",
+      "module_type": "policy",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "binary_gate_policy",
+      "path": "modules/policy/binary_gate_policy.md",
+      "module_type": "policy",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "output_schema",
+      "path": "modules/policy/output_schema.md",
+      "module_type": "policy",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "failure_modes",
+      "path": "modules/policy/failure_modes.md",
+      "module_type": "policy",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "router_policy",
+      "path": "modules/routing/router_policy.md",
+      "module_type": "routing",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "art6_limb_router",
+      "path": "modules/routing/art6_limb_router.md",
+      "module_type": "routing",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "6"
+      ]
+    },
+    {
+      "module_id": "fallback_policy",
+      "path": "modules/routing/fallback_policy.md",
+      "module_type": "routing",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "zero_award_rules",
+      "path": "modules/normative/zero_award_rules.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "zero_award_classification_rules",
+      "path": "modules/normative/zero_award_classification_rules.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "finding_sufficient_guidance",
+      "path": "modules/normative/finding_sufficient_guidance.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "claim_rules",
+      "path": "modules/normative/claim_rules.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "article41_structured",
+      "supported_articles": []
+    },
+    {
+      "module_id": "cross_article_synthesis",
+      "path": "modules/normative/cross_article_synthesis.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "generic_article_fallback",
+      "path": "modules/normative/articles/generic_article_fallback.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": []
+    },
+    {
+      "module_id": "art2",
+      "path": "modules/normative/articles/art2.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "2"
+      ]
+    },
+    {
+      "module_id": "art3",
+      "path": "modules/normative/articles/art3.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "3"
+      ]
+    },
+    {
+      "module_id": "art5",
+      "path": "modules/normative/articles/art5.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "5"
+      ]
+    },
+    {
+      "module_id": "art6_civil",
+      "path": "modules/normative/articles/art6_civil.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "6"
+      ]
+    },
+    {
+      "module_id": "art6_criminal",
+      "path": "modules/normative/articles/art6_criminal.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "6"
+      ]
+    },
+    {
+      "module_id": "art8",
+      "path": "modules/normative/articles/art8.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "8"
+      ]
+    },
+    {
+      "module_id": "art10",
+      "path": "modules/normative/articles/art10.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "10"
+      ]
+    },
+    {
+      "module_id": "art11",
+      "path": "modules/normative/articles/art11.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "11"
+      ]
+    },
+    {
+      "module_id": "art13",
+      "path": "modules/normative/articles/art13.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "13"
+      ]
+    },
+    {
+      "module_id": "art14",
+      "path": "modules/normative/articles/art14.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "14"
+      ]
+    },
+    {
+      "module_id": "p1a1",
+      "path": "modules/normative/articles/p1a1.md",
+      "module_type": "normative",
+      "allowed_modes": [
+        "award_redacted_full_info"
+      ],
+      "leakage_tier": "strict_safe",
+      "supported_articles": [
+        "P1-1"
+      ]
+    }
+  ]
+}

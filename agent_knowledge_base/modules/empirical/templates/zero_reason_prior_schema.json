@@ -1,0 +1,18 @@
+{
+  "module_type": "empirical_zero_reason",
+  "bucket": "article|article_state|article_limb|article_state_limb|global",
+  "article": null,
+  "state": null,
+  "limb": null,
+  "sample_count": 0,
+  "reason_distribution": {
+    "no_claim": 0.0,
+    "finding_sufficient": 0.0,
+    "claim_rejected_procedural": 0.0,
+    "unclear_review_needed": 0.0
+  },
+  "source_split": "train",
+  "fallback_used": false,
+  "fallback_from": null,
+  "notes": []
+}

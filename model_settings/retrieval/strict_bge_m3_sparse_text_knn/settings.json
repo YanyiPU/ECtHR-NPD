@@ -1,0 +1,165 @@
+{
+  "aggregators": [
+    "mean",
+    "median"
+  ],
+  "baseline": "BGE-M3 sparse KNN",
+  "batch_size": 4,
+  "chunk_size": 64,
+  "created_at": "2026-05-11T05:52:38Z",
+  "device": "cuda:0",
+  "document_stats": {
+    "test": {
+      "documents": 2897,
+      "empty_documents": 0,
+      "max_chars": 354597,
+      "mean_chars": 12606.436658612358,
+      "median_chars": 9233.0,
+      "p95_chars": 34646.79999999996
+    },
+    "train": {
+      "documents": 10217,
+      "empty_documents": 0,
+      "max_chars": 582303,
+      "mean_chars": 14910.353528433005,
+      "median_chars": 8957.0,
+      "p95_chars": 45676.59999999992
+    },
+    "val": {
+      "documents": 1461,
+      "empty_documents": 0,
+      "max_chars": 221781,
+      "mean_chars": 14672.8295687885,
+      "median_chars": 9449.0,
+      "p95_chars": 46058.0
+    }
+  },
+  "eval_splits": [
+    "val",
+    "test"
+  ],
+  "flagembedding_version": "1.4.0",
+  "included_case_input_keys": [
+    "text_field_serializing_case_facts",
+    "violated_articles",
+    "safe_metadata",
+    "external_factors"
+  ],
+  "input_name": "text_input",
+  "input_policy": "text_a41_free_with_safe_metadata_articles_facts_external_factors",
+  "input_subdir": "text_input",
+  "k_grid": [
+    1,
+    3,
+    5,
+    10,
+    15,
+    20,
+    25,
+    30,
+    50
+  ],
+  "leakage_note": "text_input is A41-free per package README; labels are used only for KNN award aggregation and evaluation",
+  "max_length": 2048,
+  "positive_threshold_eur": 0.5,
+  "release_input_contract": {
+    "case_facts": "strict Article-41-free text or serialized strict inputs",
+    "external_factors": "respondent-state/year economic covariates may be serialized by itemid",
+    "safe_metadata": true,
+    "strict_exclusions": [
+      "Article 41/Article 50 compensation text",
+      "operative award clauses",
+      "claimed amounts",
+      "direct award snippets",
+      "target-derived fields"
+    ],
+    "violated_articles": true
+  },
+  "retrieval_corpus_rows_by_eval_split": {
+    "test": 10217,
+    "val": 10217
+  },
+  "retrieval_mode": "sparse",
+  "retrieval_stats_by_eval_split": {
+    "test": {
+      "backend": "bge_m3_sparse",
+      "candidate_k": 10217,
+      "corpus_documents": 10217,
+      "corpus_matrix": {
+        "max_nnz_per_row": 976,
+        "mean_nnz_per_row": 482.6768131545463,
+        "median_nnz_per_row": 534.0,
+        "nnz": 4931509,
+        "p95_nnz_per_row": 684.1999999999989,
+        "shape": [
+          10217,
+          250002
+        ]
+      },
+      "features": 250002,
+      "queries": 2897,
+      "query_matrix": {
+        "max_nnz_per_row": 794,
+        "mean_nnz_per_row": 464.4753192958233,
+        "median_nnz_per_row": 512.0,
+        "nnz": 1345585,
+        "p95_nnz_per_row": 671.0,
+        "shape": [
+          2897,
+          250002
+        ]
+      },
+      "score_batch_size": 128,
+      "sparse_score_backend": "scipy"
+    },
+    "val": {
+      "backend": "bge_m3_sparse",
+      "candidate_k": 10217,
+      "corpus_documents": 10217,
+      "corpus_matrix": {
+        "max_nnz_per_row": 976,
+        "mean_nnz_per_row": 482.6768131545463,
+        "median_nnz_per_row": 534.0,
+        "nnz": 4931509,
+        "p95_nnz_per_row": 684.1999999999989,
+        "shape": [
+          10217,
+          250002
+        ]
+      },
+      "features": 250002,
+      "queries": 1461,
+      "query_matrix": {
+        "max_nnz_per_row": 859,
+        "mean_nnz_per_row": 472.91649555099247,
+        "median_nnz_per_row": 530.0,
+        "nnz": 690931,
+        "p95_nnz_per_row": 679.0,
+        "shape": [
+          1461,
+          250002
+        ]
+      },
+      "score_batch_size": 128,
+      "sparse_score_backend": "scipy"
+    }
+  },
+  "score_batch_size": 128,
+  "score_device": "cuda:0",
+  "sparse_score_backend": "auto",
+  "split_rows": {
+    "test": 2897,
+    "train": 10217,
+    "val": 1461
+  },
+  "target": "y_amount_eur",
+  "temporal_filter": "candidate_judgement_date < target_judgement_date",
+  "test_corpus": "train",
+  "test_set_excluded_from_corpus": true,
+  "text_field": "combined_input_text_with_violated_articles",
+  "text_serialization_note": "The text field should serialize safe metadata, violated articles, case facts, and external covariates; public code supports --external-factors for itemid joins.",
+  "torch_version": "2.6.0+cu126",
+  "transformers_version": "5.7.0",
+  "use_fp16": true,
+  "validation_use": "evaluation-only; validation split is never included in the retrieval corpus"
+}

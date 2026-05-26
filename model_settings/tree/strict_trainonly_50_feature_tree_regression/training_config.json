@@ -1,0 +1,74 @@
+{
+  "catboost_params": {
+    "allow_writing_files": true,
+    "depth": 4,
+    "early_stopping_rounds": null,
+    "iterations": 700,
+    "l2_leaf_reg": 5.0,
+    "learning_rate": 0.04,
+    "random_seed": 42,
+    "task_type": "CPU",
+    "verbose": false
+  },
+  "device_requested": "cpu",
+  "device_used": "cpu",
+  "gpu_info": {
+    "available": true,
+    "gpus": [
+      "NVIDIA GeForce RTX 4080 Laptop GPU, 12282 MiB, 591.59"
+    ]
+  },
+  "lightgbm_params": {
+    "colsample_bytree": 0.9,
+    "device_type": "cpu",
+    "early_stopping_rounds": null,
+    "learning_rate": 0.04,
+    "max_depth": -1,
+    "min_child_samples": 20,
+    "n_estimators": 900,
+    "n_jobs": -1,
+    "num_leaves": 31,
+    "random_state": 42,
+    "reg_lambda": 5.0,
+    "subsample": 0.9,
+    "subsample_freq": 1,
+    "verbosity": -1
+  },
+  "models": [
+    "xgboost",
+    "catboost",
+    "lightgbm"
+  ],
+  "optimization_policy": "train-only fit; validation/test metrics are reported only and are not used for early stopping or model selection",
+  "packages": {
+    "catboost": "1.2.10",
+    "joblib": "1.5.3",
+    "lightgbm": "4.6.0",
+    "numpy": "2.4.4",
+    "pandas": "3.0.2",
+    "python": "3.11.15 (main, Apr  7 2026, 20:47:24) [MSC v.1944 64 bit (AMD64)]",
+    "scikit-learn": "1.8.0",
+    "xgboost": "3.2.0"
+  },
+  "positive_threshold_eur": 0.5,
+  "seed": 42,
+  "smoke": false,
+  "split_rows": {
+    "test": 2897,
+    "train": 10217,
+    "val": 1461
+  },
+  "target": "y_amount_eur",
+  "task": "pure_regression",
+  "xgboost_params": {
+    "colsample_bytree": 0.9,
+    "device": "cpu",
+    "early_stopping_rounds": null,
+    "learning_rate": 0.04,
+    "max_depth": 4,
+    "n_estimators": 600,
+    "random_state": 42,
+    "subsample": 0.9,
+    "tree_method": "hist"
+  }
+}

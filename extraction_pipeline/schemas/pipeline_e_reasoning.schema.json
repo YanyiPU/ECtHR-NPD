@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["itemid", "reasoning_layer"],
+  "properties": {
+    "itemid": {
+      "type": "string"
+    },
+    "reasoning_layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "violation_type",
+        "violation_subtype",
+        "violation_duration_months",
+        "reasoning"
+      ],
+      "properties": {
+        "violation_type": {
+          "type": ["string", "null"],
+          "enum": ["substantive", "procedural", "both", "other", null]
+        },
+        "violation_subtype": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "violation_duration_months": {
+          "type": ["number", "null"]
+        },
+        "reasoning": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reasoning_factors", "award_reasoning_summary"],
+          "properties": {
+            "reasoning_factors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "severity_of_harm",
+                  "duration_of_violation",
+                  "applicant_vulnerability",
+                  "claim_ceiling",
+                  "equitable_basis",
+                  "finding_violation_sufficient",
+                  "precedent_anchor",
+                  "number_of_applicants_reduced",
+                  "domestic_redress_partial"
+                ]
+              }
+            },
+            "award_reasoning_summary": {
+              "type": ["string", "null"],
+              "description": "One to three sentence summary of the court's reasoning for the award amount or denial. Must be in English."
+            }
+          }
+        }
+      }
+    }
+  }
+}

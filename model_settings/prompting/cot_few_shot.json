@@ -1,0 +1,13 @@
+{
+  "input_contract": "same strict input boundary; few-shot exemplars must be train-split only",
+  "method": "chain-of-thought plus few-shot prompting",
+  "schemas": [
+    "prompts/cot_few_shot/static_cot_fewshot_schema.json",
+    "prompts/cot_few_shot/static_cot_fewshot_compact_schema.json"
+  ],
+  "templates": [
+    "prompts/cot_few_shot/static_cot_fewshot_prompt.md",
+    "prompts/cot_few_shot/static_cot_fewshot_compact_prompt.md",
+    "prompts/cot_few_shot/static_cot_fewshot_compact_serialized_prompt.md"
+  ]
+}

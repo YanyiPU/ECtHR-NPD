@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalRegression ReAct Trace",
+  "type": "object",
+  "required": [
+    "itemid",
+    "react_mode",
+    "inference_mode",
+    "events",
+    "leakage_audit"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "itemid": {
+      "type": ["string", "null"]
+    },
+    "react_mode": {
+      "enum": [
+        "strict_react",
+        "award_redacted_react",
+        "full_info_award_blind_react",
+        "agentic_claim_blind_court_outcome_free_train_only"
+      ]
+    },
+    "inference_mode": {
+      "enum": ["zero_shot", "few_shot"]
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step", "thought_summary", "action", "action_input", "observation"],
+        "additionalProperties": true,
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "thought_summary": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "inspect_case",
+              "query_target_information",
+              "search_modules",
+              "load_module",
+              "load_relevant_modules",
+              "resolve_empirical_priors",
+              "retrieve_train_references",
+              "query_reference_features",
+              "assess_zero_positive_evidence",
+              "assess_aggregation_pattern",
+              "leakage_check",
+              "final_predict"
+            ]
+          },
+          "action_input": {
+            "type": "object"
+          },
+          "observation": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "leakage_audit": {
+      "type": "object",
+      "required": ["passed", "findings"],
+      "additionalProperties": true,
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "findings": {
+          "type": "array"
+        }
+      }
+    },
+    "prediction": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "award_eur": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": ["award_eur"]
+    }
+  }
+}

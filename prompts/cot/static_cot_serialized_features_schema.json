@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "properties": {
+    "continuous_reasoning": {
+      "type": "object",
+      "properties": {
+        "case_factors": {
+          "type": "string",
+          "description": "Concise serialized case factors: violated articles, dominant violation, metadata, external factors, applicant structure, and visible harm cues."
+        },
+        "zero_award_assessment": {
+          "type": "string",
+          "description": "Visible serialized reasons for or against 0 EUR; do not infer no-claim or Article 41 defects from absent fields."
+        },
+        "damages_assessment": {
+          "type": "string",
+          "description": "Concise assessment of non-pecuniary harm gravity using only serialized strict features."
+        },
+        "applicant_aggregation": {
+          "type": "string",
+          "description": "How the single case-level total handles applicants or joined applications without per-applicant multiplication."
+        },
+        "amount_calibration": {
+          "type": "string",
+          "description": "Concrete EUR band in the form X-Y EUR and selected point; if zero, use 0-0 EUR; select 0 EUR."
+        }
+      },
+      "required": [
+        "case_factors",
+        "zero_award_assessment",
+        "damages_assessment",
+        "applicant_aggregation",
+        "amount_calibration"
+      ],
+      "additionalProperties": false
+    },
+    "final_award_reasoning": {
+      "type": "string",
+      "description": "One short paragraph explaining why the chosen original-scale EUR amount is calibrated."
+    },
+    "award_eur": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "const": 0
+        },
+        {
+          "type": "integer",
+          "minimum": 500
+        }
+      ],
+      "description": "Original-scale case-level EUR amount. Use exactly 0 when the calibrated amount is zero; otherwise use an integer of at least 500 EUR."
+    }
+  },
+  "required": [
+    "continuous_reasoning",
+    "final_award_reasoning",
+    "award_eur"
+  ],
+  "additionalProperties": false
+}

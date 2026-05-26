@@ -1,0 +1,28 @@
+# ECtHR-NPD release runtime dependencies.
+#
+# Python 3.10+ is recommended. The source reconstruction scripts use only
+# the Python standard library; packages below are for data loading,
+# evaluation, baselines, retrieval, encoder training, and optional
+# extraction token counting.
+
+# Core dataset loading and evaluation
+numpy>=1.24
+pandas>=2.0
+
+# Structured tree baselines
+catboost>=1.2
+xgboost>=2.0
+lightgbm>=4.0
+
+# BGE-M3 retrieval baseline
+FlagEmbedding>=1.2.10
+torch>=2.1
+transformers>=4.40
+sentence-transformers>=2.6
+
+# Encoder fine-tuning baseline
+accelerate>=0.29
+
+# Optional: exact token counting in extraction/code/build_extraction_layers.py.
+# The extraction pipeline falls back to a character-based counter if absent.
+tiktoken>=0.6

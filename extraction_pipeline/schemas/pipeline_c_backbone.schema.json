@@ -1,0 +1,505 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "itemid",
+    "article_41_applied",
+    "claims",
+    "awards",
+    "award_per_applicant",
+    "reasoning"
+  ],
+  "properties": {
+    "itemid": {
+      "type": "string"
+    },
+    "article_41_applied": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundled_claim",
+        "bundled_original_currency",
+        "bundled_original_amount",
+        "non_pecuniary",
+        "pecuniary",
+        "costs"
+      ],
+      "properties": {
+        "bundled_claim": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "bundled_original_currency": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bundled_original_amount": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "non_pecuniary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "original_currency",
+            "original_amount",
+            "eur_approx_court_stated"
+          ],
+          "properties": {
+            "state": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "explicit_amount",
+                "leave_to_court",
+                "no_claim",
+                "unclear",
+                null
+              ]
+            },
+            "original_currency": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "original_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "eur_approx_court_stated": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "pecuniary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "original_currency",
+            "original_amount",
+            "eur_approx_court_stated"
+          ],
+          "properties": {
+            "state": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "explicit_amount",
+                "leave_to_court",
+                "no_claim",
+                "unclear",
+                null
+              ]
+            },
+            "original_currency": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "original_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "eur_approx_court_stated": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "costs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "original_currency",
+            "original_amount",
+            "eur_approx_court_stated",
+            "scope"
+          ],
+          "properties": {
+            "state": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "explicit_amount",
+                "leave_to_court",
+                "no_claim",
+                "unclear",
+                null
+              ]
+            },
+            "original_currency": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "original_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "eur_approx_court_stated": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "scope": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "domestic",
+                "strasbourg",
+                "both",
+                "unspecified",
+                null
+              ]
+            }
+          }
+        }
+      }
+    },
+    "awards": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundled_award",
+        "bundled_award_eur",
+        "non_pecuniary",
+        "pecuniary",
+        "costs"
+      ],
+      "properties": {
+        "bundled_award": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "bundled_award_eur": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "non_pecuniary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "granted",
+            "satisfaction_sufficient",
+            "original_currency",
+            "original_amount",
+            "eur_amount",
+            "dismissed_reason"
+          ],
+          "properties": {
+            "granted": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "satisfaction_sufficient": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "original_currency": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "original_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "eur_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "dismissed_reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "no_claim",
+                "unsubstantiated",
+                "domestic_award_covers",
+                "rule_60_non_compliance",
+                "untimely",
+                "applicant_deceased_no_heir",
+                "no_causal_link",
+                null
+              ]
+            }
+          }
+        },
+        "pecuniary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "granted",
+            "satisfaction_sufficient",
+            "original_currency",
+            "original_amount",
+            "eur_amount",
+            "no_causal_link",
+            "dismissed_reason"
+          ],
+          "properties": {
+            "granted": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "satisfaction_sufficient": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "original_currency": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "original_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "eur_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "no_causal_link": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "dismissed_reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "no_claim",
+                "unsubstantiated",
+                "domestic_award_covers",
+                "rule_60_non_compliance",
+                "untimely",
+                "applicant_deceased_no_heir",
+                "no_causal_link",
+                null
+              ]
+            }
+          }
+        },
+        "costs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "granted",
+            "original_currency",
+            "original_amount",
+            "eur_amount",
+            "legal_aid_deduction_eur",
+            "net_eur",
+            "dismissed_reason"
+          ],
+          "properties": {
+            "granted": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "original_currency": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "original_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "eur_amount": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "legal_aid_deduction_eur": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "net_eur": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "dismissed_reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "rule_60_non_compliance",
+                "not_for_convention_purpose",
+                "unsubstantiated",
+                "no_claim",
+                null
+              ]
+            }
+          }
+        }
+      }
+    },
+    "award_per_applicant": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "beneficiary_label",
+          "applicant_index",
+          "head",
+          "eur_amount"
+        ],
+        "properties": {
+          "beneficiary_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "applicant_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "head": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "pecuniary",
+              "non_pecuniary",
+              "costs",
+              "bundled",
+              null
+            ]
+          },
+          "eur_amount": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "reasoning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "government_sufficiency_argument",
+        "government_counter_offer_eur",
+        "retrial_recommended",
+        "award_reason",
+        "costs_reason"
+      ],
+      "properties": {
+        "government_sufficiency_argument": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "government_counter_offer_eur": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "retrial_recommended": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "award_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "costs_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
