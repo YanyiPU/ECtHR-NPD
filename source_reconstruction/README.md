@@ -12,7 +12,7 @@ local files are not part of the public bundle.
 ## Inputs
 
 - `dataset_release/data/ecthr_npd_cases.csv`: released case index with
-  `itemid`, `hudoc_url`, split tags, labels, and safe metadata.
+  `itemid`, `hudoc_url`, split tags, labels, and case metadata.
 - `your_path/ECHROD/echr_database`: optional local ECHR-OD/ECHROD export used
   to recover public HUDOC metadata for the same `itemid` values.
 - HUDOC public conversion endpoints, accessed by `itemid`.
@@ -60,7 +60,7 @@ EXTRACTION_MODEL=your_model \
 python extraction/code/holistic_extractor.py --itemids 001-000000 --run-name local_check
 ```
 
-The strict modeling inputs in `dataset_release/model_inputs/` are already
-Article-41-free. The reconstruction workflow above is for source audit,
+The model inputs in `dataset_release/model_inputs/` already exclude
+Article 41 material. The reconstruction workflow above is for source audit,
 label extraction, and rebuilding extraction sidecars; raw judgment text and
-Article 41 material must not be fed to strict prediction baselines.
+Article 41 material must not be fed to benchmark prediction baselines.

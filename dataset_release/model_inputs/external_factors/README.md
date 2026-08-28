@@ -1,9 +1,9 @@
 # External Economic Covariates
 
 `economic_covariates.csv` contains respondent-state/year macroeconomic
-covariates used by the paper's input contract.
+covariates used by the paper's shared prediction-input policy.
 
-These fields are safe external factors rather than compensation outcomes:
+These external factors are not award outcomes:
 
 - `gdp_per_capita_current_usd`
 - `gdp_constant_2015_usd`

@@ -22,7 +22,7 @@ X_train = splits["train"].X
 y_train = splits["train"].y_amount_eur
 ```
 
-Tree-ready strict inputs:
+Tree-ready model inputs:
 
 ```text
 dataset_release/model_inputs/structured_tree/features/{train,val,test}.csv
@@ -45,14 +45,16 @@ python code/baselines/retrieval/bge_m3_knn.py --mode sparse --documents your_pat
 The CatBoost/XGBoost/LightGBM script is a direct pure-regression trainer
 using the latest `strict_trainonly_50_feature_tree_regression` settings,
 with no separate zero/positive stage. The BM25 and BGE-M3 retrieval
-scripts require user-supplied strict redacted/procedure-facts inputs
-because raw judgment text is not redistributed; retrieval inputs should
-serialize safe metadata, violated articles, case facts, and external
-factors under the shared input contract.
+scripts require user-supplied procedure/facts inputs that exclude
+Article 41 award-related material because raw judgment text is not
+redistributed; retrieval inputs should serialize case metadata, violated
+articles, case facts, and external factors under the shared
+prediction-input policy.
 
-The encoder script can run from serialized public strict inputs when
+The encoder script can run from serialized public model inputs when
 `--text-inputs` is omitted. To reproduce text-encoder runs, provide a
-strict Article-41-free text file at `your_path/strict_case_inputs.jsonl`.
+text file with Article 41 award material removed at
+`your_path/strict_case_inputs.jsonl`.
 
 Source reconstruction and extraction:
 

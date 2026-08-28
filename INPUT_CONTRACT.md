@@ -1,14 +1,15 @@
-# Shared Model Input Contract
+# Shared Prediction-Input Policy
 
-All model families in this bundle use the same strict input boundary:
+All model families in this bundle follow the shared prediction-input policy:
 
-- Safe metadata: respondent state/country code, judgment date-derived
+- Case metadata: respondent state/country code, judgment date-derived
   year/month, HUDOC decision body, court formation where available,
   case importance, separate-opinion flag, representation flag,
-  applicant counts, and non-compensation violation metadata.
+  applicant counts, and violation metadata that excludes award-related material.
 - Violated articles: violated-article list/count or article-indicator
   features.
-- Case facts: redacted non-compensation facts for text/agent settings
+- Case facts: redacted case facts that exclude Article 41 award-related
+  material for text/agent settings
   when reconstructed from HUDOC, or serialized structured inputs in this
   public release such as applicant aggregates, violation-type aggregates,
   and violation-duration features.
@@ -17,7 +18,7 @@ All model families in this bundle use the same strict input boundary:
   tree-ready matrices include `gdp_per_capita_log1p` and
   `gdp_constant_2015_log1p`.
 
-Excluded strict inputs:
+Excluded inputs:
 
 - Article 41 / Article 50 compensation text
 - operative clauses and appendix award tables
@@ -31,9 +32,9 @@ The CatBoost/XGBoost/LightGBM tree baselines consume the serialized
 structured version of this contract via `baselines.data.data_loader` and
 use direct log-scale pure regression with no separate zero/positive
 stage. The BM25, BGE-M3 dense, and BGE-M3 sparse retrieval baselines
-consume user-supplied strict procedure/facts plus metadata case inputs
-and apply train-only temporal retrieval. Encoder baselines use the same
-contract either from user-supplied strict text inputs or from serialized
-public strict inputs. Prompted and agentic conditions must use the same
-boundary even when their inputs are prompt serializations rather than CSV
+consume user-supplied procedure/facts plus case metadata and apply
+train-only temporal retrieval. Encoder baselines use the same
+policy either from user-supplied text inputs or from serialized public
+inputs. Prompted and agentic conditions must use the same policy even when
+their inputs are prompt serializations rather than CSV
 feature matrices.

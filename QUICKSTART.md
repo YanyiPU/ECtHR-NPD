@@ -28,8 +28,8 @@ python code/baselines/tree_models/train.py --model xgboost --dataset-release dat
 python code/baselines/tree_models/train.py --model lightgbm --dataset-release dataset_release
 ```
 
-The tree commands run directly from the shared folder because the strict
-structured matrices and targets are included.
+The tree commands run directly from the shared folder because the
+model-ready structured matrices and targets are included.
 
 ## 3. Text, Retrieval, Agent, And Extraction Conditions
 
@@ -37,12 +37,14 @@ These components require external resources by design:
 
 - HUDOC source documents must be reconstructed locally with
   `source_reconstruction/`; raw judgment text is not redistributed.
-- BM25 and BGE-M3 retrieval require user-supplied strict
-  Article-41-free case text or serialized strict case inputs.
-- Encoder text reproduction requires either serialized public strict
-  inputs or user-supplied strict text plus model downloads/checkpoints.
+- BM25 and BGE-M3 retrieval require user-supplied case text with
+  Article 41 award material removed or serialized model inputs that
+  conform to the shared policy.
+- Encoder text reproduction requires either serialized public model
+  inputs or user-supplied case text with Article 41 award material
+  removed, plus model downloads/checkpoints.
 - The extraction pipeline and ReAct controller require user-provided
   API credentials and model/provider choices at runtime.
 
 Use `REPRODUCIBILITY.md` for the full command map and `INPUT_CONTRACT.md`
-for the leakage boundary.
+for the shared prediction-input policy.

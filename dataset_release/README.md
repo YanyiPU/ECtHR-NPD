@@ -8,16 +8,16 @@ non-pecuniary damage awards at the European Court of Human Rights.
 
 - `data/ecthr_npd_cases.csv`: canonical public case-level table
   with public HUDOC identifiers, validated targets, chronological
-  split/view tags, leakage-audited non-compensation structured
-  annotations, and external macroeconomic covariates.
+  split/view tags, leakage-audited structured annotations that exclude
+  award-related material, and external macroeconomic covariates.
 - `splits/case_index.csv`: split and diagnostic-view membership.
 - `model_inputs/structured_tree/`: optional model-ready structured
   feature matrices for reproducing tree baselines. These are not the
   main dataset release.
 - `model_inputs/external_factors/economic_covariates.csv`: respondent-
   state/year external economic covariates available to all model
-  families under the strict input contract.
-- `INPUT_CONTRACT.md`: common model-input boundary for structured,
+  families under the shared prediction-input policy.
+- `INPUT_CONTRACT.md`: shared prediction-input policy for structured,
   encoder, prompted, and agentic conditions.
 
 ## Counts
@@ -47,6 +47,6 @@ but raw or redacted judgment text is not redistributed here.
 
 ## Use
 
-Use the strict model inputs under `model_inputs/` for reproducible
+Use the permitted model inputs under `model_inputs/` for reproducible
 baselines. Targets are provided for supervised training and evaluation
 only; they are not model inputs.

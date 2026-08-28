@@ -1,8 +1,7 @@
 # Dataset Card
 
-ECtHR-NPD is a legal NLP benchmark for formula-free legal regression:
-predicting case-level non-pecuniary damage awards at the European Court
-of Human Rights.
+ECtHR-NPD is a legal NLP benchmark for predicting case-level
+non-pecuniary damage awards at the European Court of Human Rights.
 
 The public release contains a canonical case-level table with validated
 targets, chronological split/view tags, leakage-audited structured

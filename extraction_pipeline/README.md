@@ -2,10 +2,10 @@
 
 This directory contains the release-safe extraction code used to derive
 case-level structured sidecars and Article 41 label candidates from local
-HUDOC source documents. It is separate from strict prediction baselines:
+HUDOC source documents. It is separate from benchmark prediction baselines:
 raw judgment text, Article 41 text, operative clauses, award snippets, and
 claim amounts may be read here for source extraction, but they must not be
-used as strict model inputs.
+used as model inputs.
 
 ## Layout
 

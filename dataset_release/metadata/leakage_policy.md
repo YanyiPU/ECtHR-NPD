@@ -1,6 +1,6 @@
 # Leakage Policy
 
-Strict prediction inputs exclude compensation-bearing material:
+The shared prediction-input policy excludes award-related material:
 
 - Article 41 / Article 50 compensation text
 - operative clauses and appendix award tables

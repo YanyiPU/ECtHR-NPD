@@ -13,9 +13,9 @@ reconstruction helpers, and the extraction pipeline.
   structured tree-ready inputs plus respondent-state/year external
   economic covariates.
 - `code/`: shared data loader, pure-regression tree baseline trainer,
-  encoder baseline trainer/loader, strict BM25/BGE-M3 retrieval baselines, and
+  encoder baseline trainer/loader, BM25/BGE-M3 retrieval baselines, and
   evaluation/audit helpers. The included loader reads only
-  strict model input files from `dataset_release/model_inputs/` and
+  permitted model input files from `dataset_release/model_inputs/` and
   keeps targets separate.
 - `prompts/`: zero-shot, CoT, CoT + few-shot, and agent prompt
   templates.
@@ -34,14 +34,14 @@ reconstruction helpers, and the extraction pipeline.
 - `extraction_pipeline/`: release-safe extraction code, prompts, and
   schemas for rebuilding structured sidecars and Article 41 label
   candidates from local HUDOC source documents.
-- `INPUT_CONTRACT.md`: common input boundary for structured, encoder,
+- `INPUT_CONTRACT.md`: shared prediction-input policy for structured, encoder,
   prompted, and agentic conditions.
 
 ## Excluded
 
 The bundle excludes raw HUDOC judgment text, redacted per-case text input
 files, Article 41/Article 50 text, operative award clauses, claim amount
-fields as strict inputs, result tables, figures/heatmaps, appendix drafts,
+fields as model inputs, result tables, figures/heatmaps, appendix drafts,
 per-case prediction archives, provider traces/logs, checkpoints,
 embeddings, neighbor traces, API keys/provider credentials, local paths,
 and applicant-level identifying information. Generic code paths that read
@@ -49,6 +49,5 @@ credentials from user-supplied environment variables may remain; no
 credential values are packaged.
 
 Targets are labels for supervised training and evaluation; they must not
-be used as strict model inputs. The extraction pipeline is included for
-source reconstruction and label audit only; it is not a strict baseline
-input generator.
+be used as model inputs. The extraction pipeline is included for source
+reconstruction and label audit only; it is not a baseline input generator.
