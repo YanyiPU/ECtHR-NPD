@@ -110,7 +110,7 @@ If you use ECtHR-NPD, please cite the EMNLP 2026 Main Conference paper:
 ```bibtex
 @inproceedings{pu-etal-2026-ecthr-npd,
   title = {How Much is a Human Right Worth? {ECtHR-NPD}: A Benchmark for Predicting Non-Pecuniary Damage Awards},
-  author = {Pu, Yanyi and Gonzalez-Salzberg, Damian and Yuan, Zheng and Aletras, Nikos},
+  author = {Pu, Yanyi and Gonzalez-Salzberg, Damian and Yuan, Zheng and Aletras, Nikolaos},
   booktitle = {Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing},
   year = {2026}
 }
