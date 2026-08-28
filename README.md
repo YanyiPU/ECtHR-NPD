@@ -105,8 +105,13 @@ and the Hugging Face dataset card for details.
 
 ## Citation
 
-If you use ECtHR-NPD, please cite the accompanying paper:
+If you use ECtHR-NPD, please cite the EMNLP 2026 Main Conference paper:
 
-> Yanyi Pu, Damian Gonzalez-Salzberg, Zheng Yuan, and Nikos Aletras.
-> *How Much is a Human Right Worth? ECtHR-NPD: A Benchmark for
-> Predicting Non-Pecuniary Damage Awards.* Proceedings citation forthcoming.
+```bibtex
+@inproceedings{pu-etal-2026-ecthr-npd,
+  title = {How Much is a Human Right Worth? {ECtHR-NPD}: A Benchmark for Predicting Non-Pecuniary Damage Awards},
+  author = {Pu, Yanyi and Gonzalez-Salzberg, Damian and Yuan, Zheng and Aletras, Nikos},
+  booktitle = {Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing},
+  year = {2026}
+}
+```
