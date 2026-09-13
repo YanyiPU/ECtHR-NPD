@@ -1,5 +1,24 @@
 # ECtHR-NPD
 
+## Current update status
+
+The [v1.1 release notes](docs/releases/v1.1.md) explain the five case-level
+eligibility changes individually using project-assigned IDs. The prepared
+corrected dataset has 14,570 cases, 44,557 applicant source records, and a
+698-case Challenging view. Three mixed-head cases are excluded and two
+incomplete/conflicting targets are quarantined; the source-supported two-table
+preparation is separate from the historical files already public here.
+
+**This commit updates documentation, not dataset payloads.** The existing
+`dataset_release/` is the historical public case-level release, not
+the new two-table v1.1 dataset. Public upload of the new applicant table is
+held pending explicit confirmation of the previously paused publication of
+precise demographic and award fields. Login does not certify privacy clearance.
+See [release status](RELEASE_STATUS.md). No private mappings or personal records
+are included in this documentation update.
+
+## Historical release documentation (not the new v1.1 two-table package)
+
 Code and documentation for *How Much is a Human Right Worth? ECtHR-NPD: A Benchmark for Predicting Non-Pecuniary Damage Awards*.
 
 **Data:** [Hugging Face dataset](https://huggingface.co/datasets/YanyiPU716/ECtHR-NPD)  
