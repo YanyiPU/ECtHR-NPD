@@ -1,9 +1,8 @@
 # Unified release changes — 2026-09-16
 
 Published at the author's request after local preview: one current dataset,
-the original paper cohort, and amount-only target corrections. The primary
-Hugging Face current tree is updated; GitHub synchronization remains pending
-after a tool payload-review limit blocked its write. Historical commits and
+the original paper cohort, and amount-only target corrections. The public GitHub
+and primary Hugging Face current trees are synchronized. Historical commits and
 the private HF review repository are retained. Internal canonical evidence was
 not overwritten by this publication.
 

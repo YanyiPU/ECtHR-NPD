@@ -101,11 +101,10 @@ or included to join the two tables.
 - GitHub: https://github.com/YanyiPU/ECtHR-NPD
 - Hugging Face: https://huggingface.co/datasets/YanyiPU716/ECtHR-NPD
 
-The current Hugging Face branch contains both tables and the complete matching
-research source package. GitHub synchronization is pending: its bulk-write
-request was blocked by the tool's payload-review size limit, so its current
-branch still contains the older release. For this manual review, use the data
-and code together from this Hugging Face repository.
+Both current branches carry the same two tables and matching research source
+package. All 172 file inventories and content hashes were verified across
+GitHub and Hugging Face after synchronization. Use the data and code together
+from either repository for manual review.
 Older encoded tables and separate version-policy files are superseded in the
 current tree, not erased from repository history. The older private HF review
 repository is not this current public release. Publication does not resolve
