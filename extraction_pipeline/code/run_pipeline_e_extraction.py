@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from openai_compatible_client import ApiCallError, OpenAICompatibleClient
+from openai_compatible_client import ApiCallError, OpenAICompatibleClient, retry_extraction, schema_errors
 from pipeline_c_backbone_deterministic import layer1_deterministic
 
 
@@ -156,7 +156,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--itemids", nargs="+", default=None)
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--concurrency", type=int, default=int(os.environ.get("EXTRACTION_CONCURRENCY", "8")))
-    parser.add_argument("--max-retries", type=int, default=int(os.environ.get("EXTRACTION_MAX_RETRIES", "3")))
+    parser.add_argument("--max-retries", type=int, choices=range(11), default=int(os.environ.get("EXTRACTION_MAX_RETRIES", "3")))
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -534,16 +534,9 @@ def prompt_messages(system_prompt: str, schema: dict[str, Any], row: dict[str, A
 
 
 def validate_result(result: dict[str, Any], schema: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    try:
-        import jsonschema  # type: ignore
-
-        validator = jsonschema.Draft202012Validator(schema)
-        for err in validator.iter_errors(result):
-            loc = ".".join(str(x) for x in err.absolute_path) or "<root>"
-            errors.append(f"{loc}: {err.message}")
-    except Exception:
-        pass
+    errors = schema_errors(result, schema)
+    if errors:
+        return errors
 
     if "itemid" not in result:
         errors.append("missing itemid")
@@ -669,15 +662,16 @@ def write_case_file(case_dir: Path, itemid: str, payload: dict[str, Any]) -> Non
         (case_dir / f"{itemid}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+@retry_extraction
 def run_one_case(
     itemid: str,
     row: dict[str, Any],
     client: OpenAICompatibleClient,
     system_prompt: str,
     schema: dict[str, Any],
-    max_retries: int = 1,  # kept for backward-compat with the standalone CLI; ignored by design
+    max_retries: int = 1,
 ) -> dict[str, Any]:
-    """Single-shot pipeline E execution.
+    """Pipeline E attempt, wrapped in a bounded validation/API retry loop.
 
     Returns one of:
     - {status: "success", result, usage, elapsed_seconds}
@@ -705,6 +699,7 @@ def run_one_case(
         for key in usage_total:
             if isinstance(usage.get(key), int):
                 usage_total[key] += usage[key]
+    parsed["itemid"] = itemid
     parsed = normalize_reasoning_result(parsed, prepared)
     errors = validate_result(parsed, schema)
     if errors:
@@ -748,7 +743,7 @@ def main() -> None:
     schema = load_json(SCHEMA_PATH)
     run_dir = make_run_dir(args.run_name)
 
-    split_to_ids = {split: load_split_ids(split) for split in args.splits}
+    split_to_ids = {} if args.itemids else {split: load_split_ids(split) for split in args.splits}
     if args.itemids:
         unique_ids = dedupe_preserve_order([str(x) for x in args.itemids])
         split_to_ids["manual_itemids"] = unique_ids
@@ -769,7 +764,8 @@ def main() -> None:
         missing_per_case = [itemid for itemid in unique_ids if itemid not in rows_by_itemid]
         if missing_per_case:
             print(f"[INFO] {len(missing_per_case)} cases not in per-case dir, falling back to full JSONL...")
-            rows_by_itemid = load_jsonl_by_itemid(INPUT_JSONL)
+            fallback_rows = load_jsonl_by_itemid(INPUT_JSONL) if INPUT_JSONL.exists() else {}
+            rows_by_itemid = {**fallback_rows, **rows_by_itemid}
     else:
         rows_by_itemid = load_jsonl_by_itemid(INPUT_JSONL)
     missing = [itemid for itemid in unique_ids if itemid not in rows_by_itemid]
@@ -873,6 +869,8 @@ def main() -> None:
     }
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if failure_rows:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

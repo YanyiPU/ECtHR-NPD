@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from json import JSONDecodeError, JSONDecoder
 from pathlib import Path
 from typing import Any, Iterable
@@ -16,6 +17,8 @@ CASE_STORE_DIR = DATASET_ROOT / "unstructured" / "cases_by_itemid"
 
 
 def case_store_path(itemid: str, case_store_dir: Path = CASE_STORE_DIR) -> Path:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", itemid):
+        raise ValueError("Missing or unsafe itemid")
     return case_store_dir / f"{itemid}.json"
 
 
@@ -38,7 +41,9 @@ def load_case_from_store(itemid: str, case_store_dir: Path = CASE_STORE_DIR) -> 
     if not path.exists():
         return None
     row = load_json(path)
-    return enrich_case_row(row) if isinstance(row, dict) else None
+    if not isinstance(row, dict) or str(row.get("itemid")) != str(itemid):
+        raise ValueError(f"Case-store filename/record mismatch: {path}")
+    return enrich_case_row(row)
 
 
 def write_case_to_store(
@@ -65,6 +70,8 @@ def iter_cases_from_cases_json(
     wanted_itemids: Iterable[str] | None = None,
     chunk_size: int = 1024 * 1024,
 ) -> Iterable[dict[str, Any]]:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
     decoder = JSONDecoder()
     wanted = {str(x) for x in wanted_itemids} if wanted_itemids else None
 
@@ -74,7 +81,9 @@ def iter_cases_from_cases_json(
         eof = False
 
         while True:
-            if not eof and len(buffer) < chunk_size:
+            # An incomplete object can itself exceed chunk_size. Always read
+            # the next chunk after parsing stalls, rather than spinning on it.
+            if not eof:
                 chunk = handle.read(chunk_size)
                 if chunk:
                     buffer += chunk
@@ -82,7 +91,6 @@ def iter_cases_from_cases_json(
                     eof = True
 
             idx = 0
-            progressed = False
 
             while True:
                 while idx < len(buffer) and buffer[idx].isspace():
@@ -94,14 +102,12 @@ def iter_cases_from_cases_json(
                     if buffer[idx] != "[":
                         raise ValueError(f"{path} is not a top-level JSON array")
                     started = True
-                    progressed = True
                     idx += 1
                     continue
 
                 while idx < len(buffer) and buffer[idx].isspace():
                     idx += 1
                 if idx < len(buffer) and buffer[idx] == ",":
-                    progressed = True
                     idx += 1
                     continue
 
@@ -120,7 +126,6 @@ def iter_cases_from_cases_json(
                 if not isinstance(row, dict):
                     raise ValueError("cases.json contains a non-object entry")
 
-                progressed = True
                 idx = end
 
                 itemid = str(row.get("itemid") or "")
@@ -135,10 +140,7 @@ def iter_cases_from_cases_json(
 
             if eof:
                 tail = buffer.strip()
-                if tail in ("", "]"):
-                    return
-                if not progressed:
-                    raise ValueError(f"Failed to finish parsing {path}; trailing buffer starts with: {tail[:120]!r}")
+                raise ValueError(f"Incomplete or invalid JSON array in {path}; {len(tail)} trailing characters")
 
 
 def load_cases_by_itemid(
@@ -147,6 +149,8 @@ def load_cases_by_itemid(
     fallback_cases_json: Path | None = UNSTRUCTURED_CASES,
     backfill_store: bool = True,
 ) -> dict[str, dict[str, Any]]:
+    if (case_store_dir.parent / "ingestion_pending.json").exists():
+        raise RuntimeError("Unresolved ingestion journal; complete source recovery before extraction")
     wanted = [str(x) for x in itemids]
     rows: dict[str, dict[str, Any]] = {}
     missing: list[str] = []

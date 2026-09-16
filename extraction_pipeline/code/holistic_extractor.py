@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -23,7 +24,7 @@ from build_extraction_layers import (
 )
 from case_store import CASE_STORE_DIR, UNSTRUCTURED_CASES, load_cases_by_itemid
 from docx_lossless import format_pipeline_c_appendix_text
-from openai_compatible_client import ApiCallError, OpenAICompatibleClient
+from openai_compatible_client import ApiCallError, OpenAICompatibleClient, retry_extraction, schema_errors
 from problem_log import (
     CATEGORY_API,
     CATEGORY_D_SPARSE,
@@ -170,7 +171,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-name", required=True)
     parser.add_argument("--concurrency", type=int, default=int(os.environ.get("EXTRACTION_CONCURRENCY", "20")))
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--max-retries", type=int, choices=range(11), default=3,
+                        help="Extra attempts per LLM stage after transient API/schema failure (0–10).")
+    parser.add_argument("--workspace-root", type=Path, default=None,
+                        help="Read local sources and write runs here without copying this code tree.")
     return parser.parse_args()
+
+
+def configure_workspace(root: Path) -> None:
+    global DATASET_ROOT, STRUCTURED_ROOT, CASES_CORE_JSON, OUTPUTS, CASES_OUTPUT, RUNS_ROOT
+    global CASE_STORE_DIR, UNSTRUCTURED_CASES, _split_mapping
+    DATASET_ROOT = root.resolve()
+    STRUCTURED_ROOT = DATASET_ROOT / "structured"
+    CASES_CORE_JSON = STRUCTURED_ROOT / "cases_core.json"
+    UNSTRUCTURED_CASES = DATASET_ROOT / "unstructured" / "cases.json"
+    CASE_STORE_DIR = DATASET_ROOT / "unstructured" / "cases_by_itemid"
+    OUTPUTS = DATASET_ROOT / "extraction" / "outputs"
+    CASES_OUTPUT = OUTPUTS / "cases"
+    RUNS_ROOT = OUTPUTS / "runs" / "holistic"
+    _split_mapping = None
 
 
 def load_json(path: Path) -> Any:
@@ -204,7 +223,7 @@ def load_completed_ids(run_dir: Path) -> set[str]:
             payload = load_json(meta_path)
         except Exception:
             continue
-        if payload.get("status") in {"success", "partial_success"}:
+        if payload.get("status") == "success":
             itemid = str(payload.get("itemid") or "").strip()
             if itemid:
                 seen.add(itemid)
@@ -418,16 +437,9 @@ def normalize_legal_analysis_result(result: dict[str, Any], row: dict[str, Any])
 
 
 def validate_legal_analysis_result(result: dict[str, Any], schema: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    try:
-        import jsonschema  # type: ignore
-
-        validator = jsonschema.Draft202012Validator(schema)
-        for err in validator.iter_errors(result):
-            loc = ".".join(str(x) for x in err.absolute_path) or "<root>"
-            errors.append(f"{loc}: {err.message}")
-    except Exception:
-        pass
+    errors = schema_errors(result, schema)
+    if errors:
+        return errors
 
     if "itemid" not in result:
         errors.append("missing itemid")
@@ -463,14 +475,16 @@ def merge_legal_retry_feedback(messages: list[dict[str, str]], errors: list[str]
     }]
 
 
+@retry_extraction
 def run_pipeline_d_case(
     itemid: str,
     row: dict[str, Any],
     client: OpenAICompatibleClient,
     system_prompt: str,
     schema: dict[str, Any],
+    max_retries: int = 1,
 ) -> dict[str, Any]:
-    """Single-shot pipeline D execution.
+    """Pipeline D attempt, wrapped in a bounded validation/API retry loop.
 
     Returns one of:
     - {status: "success", result, usage, elapsed_seconds}
@@ -640,6 +654,7 @@ def _prompt_messages_de_combined(
     ]
 
 
+@retry_extraction
 def run_pipeline_de_combined_case(
     itemid: str,
     row: dict[str, Any],
@@ -648,6 +663,7 @@ def run_pipeline_de_combined_case(
     system_prompt_e: str,
     schema_d: dict[str, Any],
     schema_e: dict[str, Any],
+    max_retries: int = 1,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Single LLM call that extracts both D legal_analysis and E reasoning_layer.
 
@@ -1092,17 +1108,17 @@ def _per_applicant_comparable_diff(final_awards: dict[str, Any], rows: list[dict
 
 
 def _repair_award_rows(rows: Any, b_result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize candidate fields without inferring a person mapping.
+
+    A model-supplied index remains only a candidate index. Missing indices
+    stay missing, even if row/applicant counts match. No surname matching,
+    name filling from array position, equal split, or group-to-person link.
+    """
     if not isinstance(rows, list):
         return []
     num_applicants = ((b_result.get("facts_procedure") or {}).get("num_applicants"))
-    applicants = ((b_result.get("facts_procedure") or {}).get("applicants")) or []
-    exact_map, surname_map = _build_applicant_label_maps(applicants if isinstance(applicants, list) else [])
-
     repaired_rows: list[dict[str, Any]] = []
-    used_indices: set[int] = set()
-    unlabeled_unindexed_positions: list[int] = []
-
-    for row_pos, raw_row in enumerate(rows, start=1):
+    for raw_row in rows:
         if not isinstance(raw_row, dict):
             continue
         fixed = dict(raw_row)
@@ -1113,30 +1129,19 @@ def _repair_award_rows(rows: Any, b_result: dict[str, Any]) -> list[dict[str, An
             label = None
         fixed["beneficiary_label"] = label
 
-        idx = _resolve_row_index(fixed, num_applicants if isinstance(num_applicants, int) else None, exact_map, surname_map)
+        idx = raw_row.get("applicant_index")
+        if not isinstance(idx, int) or isinstance(idx, bool) or idx < 1:
+            idx = None
+        if isinstance(num_applicants, int) and idx is not None and idx > num_applicants:
+            idx = None
+        # Conservative: joint/group/external beneficiary descriptions must not
+        # masquerade as one individual because the model supplied index 1.
+        if _beneficiary_kind(label) in {"group", "external"} or (
+            isinstance(label, str) and re.search(r"\b(?:and|joint|jointly|group)\b|&", label, re.IGNORECASE)
+        ):
+            idx = None
         fixed["applicant_index"] = idx
-
-        if idx is not None:
-            used_indices.add(idx)
-            if (fixed.get("beneficiary_label") in (None, "")) and 1 <= idx <= len(applicants):
-                app = applicants[idx - 1]
-                if isinstance(app, dict) and isinstance(app.get("beneficiary_label"), str) and app.get("beneficiary_label"):
-                    fixed["beneficiary_label"] = app.get("beneficiary_label")
-        elif _beneficiary_kind(label) == "unknown":
-            unlabeled_unindexed_positions.append(len(repaired_rows))
-
         repaired_rows.append(fixed)
-
-    if isinstance(num_applicants, int) and num_applicants > 0 and len(repaired_rows) == num_applicants:
-        available = [idx for idx in range(1, num_applicants + 1) if idx not in used_indices]
-        if len(unlabeled_unindexed_positions) == len(available):
-            for pos, idx in zip(unlabeled_unindexed_positions, available):
-                repaired_rows[pos]["applicant_index"] = idx
-                if 1 <= idx <= len(applicants):
-                    app = applicants[idx - 1]
-                    if isinstance(app, dict) and isinstance(app.get("beneficiary_label"), str) and app.get("beneficiary_label"):
-                        repaired_rows[pos]["beneficiary_label"] = app.get("beneficiary_label")
-
     return repaired_rows
 
 
@@ -1149,6 +1154,23 @@ def _repair_c_per_applicant(c_result: dict[str, Any], b_result: dict[str, Any]) 
     fallback_rows = c_result.get("award_per_applicant_fallback") or []
     repaired_primary = _repair_award_rows(primary_rows, b_result)
     repaired_fallback = _repair_award_rows(fallback_rows, b_result)
+    mapping_audit = []
+    for source_kind, original, normalized in (("primary", primary_rows, repaired_primary),
+                                               ("fallback", fallback_rows, repaired_fallback)):
+        original_objects = [row for row in original or [] if isinstance(row, dict)]
+        for source_row, candidate in zip(original_objects, normalized):
+            mapping_audit.append({
+                "source_kind": source_kind,
+                "source_row_sha256": hashlib.sha256(json.dumps(source_row, sort_keys=True, ensure_ascii=False,
+                                                               allow_nan=False).encode()).hexdigest(),
+                "source_applicant_index": source_row.get("applicant_index"),
+                "candidate_applicant_index": candidate.get("applicant_index"),
+                "verified_applicant_id": None,
+                "mapping_status": "candidate_index_unverified" if candidate.get("applicant_index") is not None else "not_person_linked_candidate",
+                "identity_review_required": True,
+            })
+    c_result["per_applicant_mapping_audit"] = mapping_audit
+    c_result["per_applicant_linkage_status"] = "unverified_candidates_only"
 
     if repaired_primary:
         article_41["award_per_applicant"] = repaired_primary
@@ -1164,7 +1186,7 @@ def _repair_c_per_applicant(c_result: dict[str, Any], b_result: dict[str, Any]) 
     c_result["per_applicant_total_diff_eur"] = primary_diff
 
     if repaired_primary:
-        c_result["per_applicant_source"] = "llm_repaired"
+        c_result["per_applicant_source"] = "llm_candidates_unverified"
     elif repaired_fallback:
         c_result["per_applicant_source"] = "llm_missing_regex_validator_available"
     else:
@@ -1294,12 +1316,13 @@ def run_one_case(
     prompt_d: str,
     prompt_e: str,
     problem_log: ProblemLog,
+    max_retries: int = 3,
 ) -> dict[str, Any]:
     start = time.perf_counter()
     scaffold = _build_scaffold(source_row, core_lookup, count_tokens)
 
     # ---- B: facts/procedure ------------------------------------------------
-    b_payload = run_pipeline_b_case(itemid, scaffold, source_row, client, prompt_b, schema_b)
+    b_payload = run_pipeline_b_case(itemid, scaffold, source_row, client, prompt_b, schema_b, max_retries=max_retries)
     if b_payload.get("status") == "success":
         b_result = b_payload["result"]
     else:
@@ -1307,20 +1330,15 @@ def run_one_case(
         b_result = _fallback_b_result(itemid, scaffold)
 
     # ---- C: Article 41 / compensation -------------------------------------
-    c_payload = run_pipeline_c_case(itemid, scaffold, client, prompt_c, schema_c, regex_only=False)
+    c_scaffold = scaffold
+    if b_payload.get("status") == "success":
+        c_scaffold = {**scaffold, "facts_procedure": {
+            **(scaffold.get("facts_procedure") or {}), **(b_result.get("facts_procedure") or {})}}
+    c_payload = run_pipeline_c_case(itemid, c_scaffold, client, prompt_c, schema_c,
+                                    max_retries=max_retries, regex_only=False)
     
-    if c_payload.get("status") in ("success", "schema_validation") and c_payload.get("raw_result"):
-        if c_payload.get("status") == "schema_validation":
-            _record_stage_problem(problem_log, itemid, "c", c_payload)
-            # Schema validation failed, but we have LLM output. Let's compact it anyway.
-            from run_pipeline_c_backbone import layer3_crossval, compact_compensation_result
-            c_awards_regex = c_payload.get("awards_regex", {})
-            crossval = layer3_crossval(c_awards_regex, c_payload["raw_result"])
-            c_result = compact_compensation_result(itemid, c_awards_regex, c_payload["raw_result"], crossval, source_row=source_row)
-            c_payload["result"] = c_result
-        else:
-            c_result = c_payload["result"]
-            
+    if c_payload.get("status") == "success":
+        c_result = c_payload["result"]
         c_usage = _usage_or_zero(c_payload)
     else:
         _record_stage_problem(problem_log, itemid, "c", c_payload)
@@ -1333,7 +1351,7 @@ def run_one_case(
     # twice (~7k tokens of duplication per case) is wasteful. The shared usage
     # is attributed to d_payload.
     d_payload, e_payload = run_pipeline_de_combined_case(
-        itemid, scaffold, client, prompt_d, prompt_e, schema_d, schema_e
+        itemid, scaffold, client, prompt_d, prompt_e, schema_d, schema_e, max_retries=max_retries
     )
 
     if d_payload.get("status") == "success":
@@ -1396,6 +1414,7 @@ def run_one_case(
         "simplified_run": True,
         "stage_status": stage_status,
         "stage_usage": stage_usage,
+        "acceptance_status": "candidate_requires_dataset_review" if overall_status == "success" else "quarantined_incomplete",
     }
     prepared_for_sidecars = prepare_reasoning_context(scaffold)
     b_llm_candidate = _compact_candidate_tree(b_payload.get("result") or b_payload.get("raw_result") or {})
@@ -1459,6 +1478,8 @@ def run_one_case(
         "article_41_extraction": c_result.get("article_41_extraction"),
         "award_per_applicant_fallback": c_result.get("award_per_applicant_fallback"),
         "per_applicant_source": c_result.get("per_applicant_source"),
+        "per_applicant_linkage_status": c_result.get("per_applicant_linkage_status"),
+        "per_applicant_mapping_audit": c_result.get("per_applicant_mapping_audit"),
         "per_applicant_total_diff_eur": c_result.get("per_applicant_total_diff_eur"),
         "cross_validation": c_result.get("cross_validation"),
         "final_awards": c_result.get("final_awards"),
@@ -1626,6 +1647,8 @@ def run_one_case(
         "article_41_precedents": art41_precedents,
         "award_per_applicant_fallback": c_result.get("award_per_applicant_fallback"),
         "per_applicant_source": c_result.get("per_applicant_source"),
+        "per_applicant_linkage_status": c_result.get("per_applicant_linkage_status"),
+        "per_applicant_mapping_audit": c_result.get("per_applicant_mapping_audit"),
         "per_applicant_total_diff_eur": c_result.get("per_applicant_total_diff_eur"),
         "cross_validation": c_result.get("cross_validation"),
         "final_awards": c_result.get("final_awards"),
@@ -1672,7 +1695,7 @@ def _get_group(itemid: str) -> str:
         try:
             import json
             from pathlib import Path
-            json_path = Path(__file__).resolve().parent.parent.parent / "splits" / "split_membership.json"
+            json_path = DATASET_ROOT / "splits" / "split_membership.json"
             if json_path.exists():
                 data = json.loads(json_path.read_text(encoding="utf-8"))
                 _split_mapping = {d["itemid"]: d["split"] for d in data}
@@ -1732,6 +1755,14 @@ def write_case_result(itemid: str, layers: dict[str, dict[str, Any]]) -> None:
 
 def main() -> None:
     args = parse_args()
+    if getattr(args, "workspace_root", None) is not None:
+        configure_workspace(args.workspace_root)
+    if args.concurrency < 1:
+        raise ValueError("--concurrency must be positive")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.run_name):
+        raise ValueError("--run-name must be a simple filename component")
+    if len(args.itemids) != len(set(args.itemids)):
+        raise ValueError("Duplicate --itemids are not allowed")
     start = time.perf_counter()
     schema_b = load_json(SCHEMA_B)
     schema_c = load_json(SCHEMA_C)
@@ -1748,6 +1779,7 @@ def main() -> None:
         "itemids": args.itemids,
         "concurrency": args.concurrency,
         "resume": args.resume,
+        "max_retries": args.max_retries,
         "case_store_dir": str(CASE_STORE_DIR),
         "unstructured_cases": str(UNSTRUCTURED_CASES),
         "schemas": {
@@ -1765,10 +1797,11 @@ def main() -> None:
     }
     (run_dir / "run_metadata.json").write_text(json.dumps(run_metadata, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    already_done = load_completed_ids(run_dir) if args.resume else set()
+    already_done = load_completed_ids(run_dir).intersection(args.itemids) if args.resume else set()
     todo_ids = [itemid for itemid in args.itemids if itemid not in already_done]
 
-    source_rows = load_cases_by_itemid(todo_ids if todo_ids else args.itemids, fallback_cases_json=UNSTRUCTURED_CASES, backfill_store=True)
+    source_rows = load_cases_by_itemid(todo_ids if todo_ids else args.itemids, case_store_dir=CASE_STORE_DIR,
+                                     fallback_cases_json=UNSTRUCTURED_CASES, backfill_store=True)
     missing = [itemid for itemid in todo_ids if itemid not in source_rows]
     if missing:
         raise RuntimeError(f"{len(missing)} itemids were not found in case store or cases.json")
@@ -1800,6 +1833,7 @@ def main() -> None:
                 prompt_d,
                 prompt_e,
                 problem_log,
+                args.max_retries,
             ): itemid
             for itemid in todo_ids
         }
@@ -1817,16 +1851,19 @@ def main() -> None:
                     usage_total[key] += usage[key]
 
             status = payload.get("status")
-            if status in {"success", "partial_success"}:
-                if status == "success":
-                    success_count += 1
-                else:
-                    partial_count += 1
+            if status == "success":
+                success_count += 1
                 layers = payload.get("layers") or {}
                 if not layers and isinstance(payload.get("result"), dict):
                     # safety net: if a worker returns the legacy shape, persist merged-only
                     layers = {"merged": payload["result"]}
                 write_case_result(itemid, layers)
+            elif status == "partial_success":
+                partial_count += 1
+                quarantine_dir = run_dir / "quarantine"
+                quarantine_dir.mkdir(exist_ok=True)
+                (quarantine_dir / f"{itemid}.json").write_text(
+                    json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             else:
                 failure_count += 1
 
@@ -1843,12 +1880,15 @@ def main() -> None:
         "partial_cases": partial_count,
         "failed_cases": failure_count,
         "usage_total": usage_total,
-        "completed_cases": success_count + partial_count,
+        "completed_cases": success_count,
+        "requires_review_or_retry": partial_count + failure_count,
         "todo_cases": len(todo_ids),
         "resumed_cases": len(already_done),
     }
     (run_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if partial_count or failure_count:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

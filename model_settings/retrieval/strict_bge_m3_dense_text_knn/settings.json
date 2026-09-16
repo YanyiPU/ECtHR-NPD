@@ -1,6 +1,5 @@
 {
   "aggregators": [
-    "mean",
     "median"
   ],
   "baseline": "BGE-M3 dense KNN",
@@ -40,32 +39,24 @@
   ],
   "flagembedding_version": "1.4.0",
   "included_case_input_keys": [
-    "text_field_serializing_case_facts",
-    "violated_articles",
-    "safe_metadata",
-    "external_factors"
+    "facts_text",
+    "violated_articles"
   ],
   "input_name": "text_input",
-  "input_policy": "text_a41_free_with_safe_metadata_articles_facts_external_factors",
+  "input_policy": "strict Article-41-free FACTS only; violated_articles is used only as the candidate filter",
   "input_subdir": "text_input",
   "k_grid": [
-    1,
-    3,
-    5,
-    10,
-    15,
-    20,
-    25,
-    30,
-    50
+    20
   ],
+  "selected_k": 20,
+  "selected_aggregator": "median",
   "leakage_note": "text_input is A41-free per package README; labels are used only for KNN award aggregation and evaluation",
   "max_length": 2048,
   "positive_threshold_eur": 0.5,
   "release_input_contract": {
-    "case_facts": "strict Article-41-free text or serialized strict inputs",
-    "external_factors": "respondent-state/year economic covariates may be serialized by itemid",
-    "safe_metadata": true,
+    "case_facts": "strict Article-41-free FACTS text",
+    "external_factors": false,
+    "safe_metadata": false,
     "strict_exclusions": [
       "Article 41/Article 50 compensation text",
       "operative award clauses",
@@ -73,7 +64,7 @@
       "direct award snippets",
       "target-derived fields"
     ],
-    "violated_articles": true
+    "violated_articles": "filter-only; never serialized into FACTS text"
   },
   "retrieval_corpus_rows_by_eval_split": {
     "test": 10217,
@@ -112,10 +103,16 @@
   "temporal_filter": "candidate_judgement_date < target_judgement_date",
   "test_corpus": "train",
   "test_set_excluded_from_corpus": true,
-  "text_field": "combined_input_text_with_violated_articles",
-  "text_serialization_note": "The text field should serialize safe metadata, violated articles, case facts, and external covariates; public code supports --external-factors for itemid joins.",
+  "text_field": "facts_text",
+  "text_serialization_note": "The runner accepts only strict FACTS text and does not append metadata or external covariates.",
   "torch_version": "2.6.0+cu126",
   "transformers_version": "5.7.0",
   "use_fp16": true,
-  "validation_use": "evaluation-only; validation split is never included in the retrieval corpus"
+  "validation_use": "the reported final median K=20 is implemented; the historical validation selection trace is not bundled",
+  "article_filter": "candidate and target share at least one violated Article",
+  "no_eligible_neighbor_fallback": "training-split median y_amount_eur",
+  "historical_artifacts": {
+    "status": "not_released",
+    "missing": ["historical FACTS corpus", "historical embeddings", "validation selection trace", "reported predictions"]
+  }
 }

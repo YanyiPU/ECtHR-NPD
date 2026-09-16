@@ -1,9 +1,8 @@
 """Minimal OpenAI-compatible chat client used by the simplified extractor.
 
-Single-attempt by design: any failure (timeout, HTTP error, malformed payload)
-raises a typed `ApiCallError`. The orchestrator records the failure to
-`problems.jsonl` and re-runs the case in a later batch — there is no internal
-retry, no exponential backoff.
+Chat transport attempts raise typed `ApiCallError` exceptions. Extraction
+stages own a bounded retry budget; transport POSTs do not multiply that
+budget. GET and upload helpers retain their separate network retry policy.
 
 DashScope extras supported:
   - Context cache: create_context() → context_id, then pass context_id to chat_json()
@@ -12,6 +11,7 @@ DashScope extras supported:
 from __future__ import annotations
 
 import json
+import inspect
 import os
 import socket
 import time
@@ -21,6 +21,104 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 from functools import wraps
+
+
+TRANSIENT_API_ERRORS = {"timeout", "connect", "http_429", "http_5xx"}
+
+
+def schema_errors(result: Any, schema: dict[str, Any]) -> list[str]:
+    """Validate strictly: missing validator or an invalid schema is fatal."""
+    try:
+        from jsonschema import Draft202012Validator
+    except ImportError as exc:
+        raise RuntimeError("Extraction requires jsonschema; install requirements-extraction.txt") from exc
+    Draft202012Validator.check_schema(schema)
+    return [
+        f"{'.'.join(str(x) for x in err.absolute_path) or '<root>'}: {err.message}"
+        for err in Draft202012Validator(schema).iter_errors(result)
+    ]
+
+
+class _RetryFeedbackClient:
+    """Per-case proxy; never mutate the shared, threaded provider client."""
+
+    def __init__(self, client: Any) -> None:
+        self.client = client
+        self.previous_result: Any = None
+        self.errors: list[str] = []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.client, name)
+
+    def chat_json(self, **kwargs: Any) -> Any:
+        if self.errors and self.previous_result is not None:
+            kwargs["messages"] = list(kwargs["messages"]) + [
+                {"role": "assistant", "content": json.dumps(self.previous_result, ensure_ascii=False)},
+                {"role": "user", "content": "Return a complete corrected JSON object. Validation errors: "
+                 + json.dumps(self.errors, ensure_ascii=False)},
+            ]
+        result, usage = self.client.chat_json(**kwargs)
+        self.previous_result = result
+        return result, usage
+
+
+def retry_extraction(func):
+    """Retry a stage, not its transport: max_retries is extra attempts (0–10).
+
+    Schema failures receive validation feedback; only transient API errors
+    retry. Authentication, payload and deterministic programming errors do not.
+    Tuple results support the combined D/E call without double-counting usage.
+    """
+    signature = inspect.signature(func)
+
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        bound = signature.bind(*args, **kwargs)
+        bound.apply_defaults()
+        budget = bound.arguments.get("max_retries", 1)
+        if not isinstance(budget, int) or isinstance(budget, bool) or not 0 <= budget <= 10:
+            raise ValueError("max_retries must be an integer between 0 and 10")
+        for name in ("schema", "schema_d", "schema_e"):
+            if name in bound.arguments:
+                # Preflight the dependency/schema before any paid request.
+                schema_errors({}, bound.arguments[name])
+        if bound.arguments.get("regex_only"):
+            return func(*bound.args, **bound.kwargs)
+        proxy = _RetryFeedbackClient(bound.arguments["client"])
+        bound.arguments["client"] = proxy
+        totals: list[dict[str, int]] = []
+        start = time.perf_counter()
+        history = []
+        for attempt in range(1, budget + 2):
+            output = func(*bound.args, **bound.kwargs)
+            payloads = list(output) if isinstance(output, tuple) else [output]
+            if not totals:
+                totals = [{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0} for _ in payloads]
+            for payload, total in zip(payloads, totals):
+                for key in total:
+                    value = (payload.get("usage") or {}).get(key)
+                    if isinstance(value, int):
+                        total[key] += value
+            failed = [p for p in payloads if p.get("status") != "success"]
+            history.append({"attempt": attempt, "statuses": [p.get("status") for p in payloads],
+                            "api_error_kinds": [(p.get("api_error") or {}).get("kind") for p in failed]})
+            retryable = bool(failed) and all(
+                p.get("status") == "schema_validation" or
+                (p.get("status") == "api_error" and (p.get("api_error") or {}).get("kind") in TRANSIENT_API_ERRORS)
+                for p in failed
+            )
+            if not retryable or attempt > budget:
+                for payload, total in zip(payloads, totals):
+                    payload.update(attempts=attempt, usage=dict(total),
+                                   elapsed_seconds=time.perf_counter() - start, attempt_history=history)
+                return tuple(payloads) if isinstance(output, tuple) else payloads[0]
+            proxy.errors = [str(error) for p in failed for error in p.get("errors", [])]
+            if any(p.get("status") == "api_error" for p in failed):
+                time.sleep(min(2 ** (attempt - 1), 30))
+        raise AssertionError("unreachable retry state")
+
+    return wrapped
+
 
 def retry_on_network_error(max_retries=3, backoff_factor=2):
     def decorator(func):
@@ -40,7 +138,7 @@ def retry_on_network_error(max_retries=3, backoff_factor=2):
                     time.sleep(sleep_time)
                     retries += 1
                 except ApiCallError as e:
-                    if e.kind not in ("timeout", "http_5xx", "http_429"):
+                    if e.kind not in TRANSIENT_API_ERRORS:
                         raise e
                     err = e
                     if retries >= max_retries:
@@ -238,7 +336,6 @@ class OpenAICompatibleClient:
             "Authorization": f"Bearer {self.api_key}",
         }
 
-    @retry_on_network_error()
     def _post_json(self, path: str, body: dict[str, Any], timeout: int | None = None) -> dict[str, Any]:
         """POST JSON to `{base_url}/{path}`, return parsed response dict."""
         request = urllib.request.Request(
@@ -259,12 +356,14 @@ class OpenAICompatibleClient:
             except Exception:
                 detail = ""
             kind = "http_429" if exc.code == 429 else ("http_4xx" if 400 <= exc.code < 500 else "http_5xx")
-            raise ApiCallError(kind, exc.code, detail[:1000]) from exc
+            raise ApiCallError(kind, exc.code, "Provider request failed; response body withheld") from exc
         except urllib.error.URLError as exc:
             reason = getattr(exc, "reason", exc)
             if isinstance(reason, socket.timeout):
                 raise ApiCallError("timeout", None, f"socket timeout after {t}s") from exc
             raise ApiCallError("connect", None, str(reason)) from exc
+        except OSError as exc:
+            raise ApiCallError("connect", None, str(exc)) from exc
         try:
             return json.loads(body_bytes)
         except json.JSONDecodeError as exc:
@@ -290,7 +389,7 @@ class OpenAICompatibleClient:
             except Exception:
                 detail = ""
             kind = "http_429" if exc.code == 429 else ("http_4xx" if 400 <= exc.code < 500 else "http_5xx")
-            raise ApiCallError(kind, exc.code, detail[:1000]) from exc
+            raise ApiCallError(kind, exc.code, "Provider request failed; response body withheld") from exc
         except urllib.error.URLError as exc:
             reason = getattr(exc, "reason", exc)
             if isinstance(reason, socket.timeout):
@@ -323,7 +422,7 @@ class OpenAICompatibleClient:
         data = self._post_json("/context/create", body, timeout=60)
         context_id = data.get("id") or data.get("context_id")
         if not context_id:
-            raise ApiCallError("payload", None, f"context/create response missing id: {data}")
+            raise ApiCallError("payload", None, "context/create response missing id")
         return str(context_id)
 
     # ------------------------------------------------------------------
@@ -390,7 +489,7 @@ class OpenAICompatibleClient:
                 kind = "http_4xx"
             else:
                 kind = "http_5xx"
-            raise ApiCallError(kind, exc.code, detail[:1000]) from exc
+            raise ApiCallError(kind, exc.code, "Provider request failed; response body withheld") from exc
         except urllib.error.URLError as exc:
             reason = getattr(exc, "reason", exc)
             if isinstance(reason, socket.timeout):
@@ -442,11 +541,13 @@ class OpenAICompatibleClient:
                 tmp.write(b"\n")
             tmp_path = tmp.name
         size_mb = os.path.getsize(tmp_path) / (1024 * 1024)
-        print(f"[upload] wrote {tmp_path} ({size_mb:.1f} MB) in {_time.time()-_t0:.1f}s", flush=True)
+        print(f"[upload] prepared private batch file ({size_mb:.1f} MB) in {_time.time()-_t0:.1f}s", flush=True)
 
         try:
             # --progress-bar gives live upload feedback to stderr so you can see
             # bytes actually moving. -N disables buffering on stdout/stderr.
+            if any(c in self.api_key for c in "\r\n"):
+                raise ApiCallError("configuration", None, "API key contains an invalid newline")
             cmd = [
                 "curl", "-N", "--progress-bar", "--fail-with-body",
                 "--connect-timeout", "30",
@@ -454,7 +555,7 @@ class OpenAICompatibleClient:
                 "--expect100-timeout", "30",
                 "-X", "POST",
                 f"{self.base_url}/files",
-                "-H", f"Authorization: Bearer {self.api_key}",
+                "-H", "@-",
                 "-F", "purpose=batch",
                 "-F", f"file=@{tmp_path};type=application/jsonl",
             ]
@@ -462,24 +563,25 @@ class OpenAICompatibleClient:
             _t1 = _time.time()
             # Don't capture stderr so the progress bar streams to the terminal live.
             result = subprocess.run(
-                cmd, stdout=subprocess.PIPE, text=True, check=False, timeout=7300
+                cmd, input=f"Authorization: Bearer {self.api_key}\n",
+                stdout=subprocess.PIPE, text=True, check=False, timeout=7300
             )
             print(f"[upload] curl exited rc={result.returncode} in {_time.time()-_t1:.1f}s", flush=True)
             
             if result.returncode != 0:
-                raise ApiCallError("connect", None, f"curl rc={result.returncode}: {(result.stdout or '')[:1000]}")
+                raise ApiCallError("connect", None, f"curl rc={result.returncode}; response body withheld")
             
             try:
                 data = json.loads(result.stdout)
             except json.JSONDecodeError as e:
-                raise ApiCallError("payload", None, f"Failed to parse dashscope response: {result.stdout}")
+                raise ApiCallError("payload", None, "Failed to parse provider upload response") from e
                 
             if "error" in data:
-                raise ApiCallError("http_4xx", None, str(data["error"]))
+                raise ApiCallError("http_4xx", None, "Provider upload error; response body withheld")
 
             file_id = data.get("id")
             if not file_id:
-                raise ApiCallError("payload", None, f"file upload response missing id: {data}")
+                raise ApiCallError("payload", None, "File upload response missing id")
             return str(file_id)
         finally:
             if os.path.exists(tmp_path):
@@ -494,7 +596,7 @@ class OpenAICompatibleClient:
         }, timeout=60)
         batch_id = data.get("id")
         if not batch_id:
-            raise ApiCallError("payload", None, f"batch create response missing id: {data}")
+            raise ApiCallError("payload", None, "Batch create response missing id")
         return str(batch_id)
 
     def get_batch(self, batch_id: str) -> dict[str, Any]:
@@ -513,7 +615,7 @@ class OpenAICompatibleClient:
                 raw = resp.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
-            raise ApiCallError("http_4xx" if 400 <= exc.code < 500 else "http_5xx", exc.code, detail[:1000]) from exc
+            raise ApiCallError("http_4xx" if 400 <= exc.code < 500 else "http_5xx", exc.code, "Provider request failed; response body withheld") from exc
         except urllib.error.URLError as exc:
             raise ApiCallError("connect", None, str(getattr(exc, "reason", exc))) from exc
         return [line for line in raw.splitlines() if line.strip()]

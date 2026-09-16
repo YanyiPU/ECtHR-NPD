@@ -77,7 +77,7 @@ Mitigation:
 - use safe appendix rows as applicant-structure context only; redacted award
   spans and award-derived fields remain unusable
 
-## FM6. Redaction-Marker Leakage
+## FM7. Redaction-Marker Leakage
 
 Symptom:
 
@@ -86,7 +86,7 @@ Symptom:
 
 Mitigation:
 
-- require internal amount reasoning to cite allowed facts, claims, priors, or
-  few-shot references
+- require internal amount reasoning to cite allowed facts, strict-safe metadata
+  or extracted hints, train-only priors, or few-shot references
 - do not cite the redaction marker as substantive evidence
 - validate that direct target award fields are absent from target inputs

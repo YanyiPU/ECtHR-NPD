@@ -1,7 +1,7 @@
 {
   "categorical_columns": [
     "country_alpha2",
-    "doctypebranch",
+    "hudoc_decision_body",
     "case_importance",
     "violation_type"
   ],
@@ -12,19 +12,19 @@
       "y_binary",
       "y_source"
     ],
-    "leakage_guard": []
+    "leakage_guard": ["perapp_unique_beneficiary_category_count", "perapp_has_joint_beneficiary_category_flag"]
   },
   "feature_columns": [
     "country_alpha2",
-    "doctypebranch",
+    "hudoc_decision_body",
     "case_importance",
     "has_separate_opinion",
     "represented",
     "num_violations_found",
     "violation_type",
     "num_applicants",
-    "judgment_year_from_judgementdate",
-    "judgment_month_from_judgementdate",
+    "judgment_year",
+    "judgment_month",
     "violated_articles_count",
     "violated_article_6",
     "violated_article_3",
@@ -57,8 +57,6 @@
     "app_birth_year_median",
     "app_unique_nationality_count",
     "app_multi_nationality_flag",
-    "perapp_unique_beneficiary_label_count",
-    "perapp_has_joint_label_flag",
     "rl_violation_type_procedural_ratio",
     "rl_violation_type_both_ratio",
     "rl_violation_duration_months",
@@ -66,15 +64,23 @@
     "gdp_per_capita_log1p",
     "gdp_constant_2015_log1p"
   ],
-  "feature_count": 50,
+  "feature_count": 48,
+  "profile_status": "corrected_internal_48_not_certified_historical_X1",
+  "lineage_status": "two allocation-derived features removed; remaining exact X0-X3 historical mapping unresolved",
+  "legacy_directory_name": "strict_trainonly_50_feature_tree_regression retained only for path compatibility",
   "itemid_policy": "itemid is used only for joins, alignment checks, and prediction outputs; it is not a feature.",
+  "categorical_handling": {
+    "catboost": "native categorical pools",
+    "xgboost_lightgbm": "train-only one-hot with explicit missing and unknown-category dummies"
+  },
+  "numeric_imputation": "training-split median; an entirely missing training feature is an error",
   "numeric_columns": [
     "has_separate_opinion",
     "represented",
     "num_violations_found",
     "num_applicants",
-    "judgment_year_from_judgementdate",
-    "judgment_month_from_judgementdate",
+    "judgment_year",
+    "judgment_month",
     "violated_articles_count",
     "violated_article_6",
     "violated_article_3",
@@ -107,8 +113,6 @@
     "app_birth_year_median",
     "app_unique_nationality_count",
     "app_multi_nationality_flag",
-    "perapp_unique_beneficiary_label_count",
-    "perapp_has_joint_label_flag",
     "rl_violation_type_procedural_ratio",
     "rl_violation_type_both_ratio",
     "rl_violation_duration_months",

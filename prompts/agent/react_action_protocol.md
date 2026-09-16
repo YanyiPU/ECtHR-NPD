@@ -5,6 +5,11 @@ reasoning/action loop. The controller owns all file access, retrieval,
 redaction, and leakage checks. The model may only request one allowed action at
 a time.
 
+The public default is `strict_react`. Only that mode follows the released
+strict target-input contract. Every other mode below is a restricted diagnostic
+and must not be described as a strict-input evaluation or a reproduction of a
+submitted-paper result.
+
 ## Action Object
 
 Every non-final model turn must return exactly one JSON action object:
@@ -61,8 +66,10 @@ The model then receives the updated trace and may request another action.
     `reasoning_layer.award_reasoning_summary` are blocked. They are LLM
     extraction outputs, not source-text quotes.
 - `assess_zero_positive_evidence`
-  - Compares visible target claim/applicant signals, train-only empirical
-    zero rates, positive references, and zero / finding-sufficient references.
+  - Compares only information permitted by the active mode with train-only
+    empirical zero rates, positive references, and zero /
+    finding-sufficient references. In `strict_react`, target claims, Article 41
+    material, outcome reasons, labels, and provenance are unavailable.
   - Returns a calibration recommendation:
     `zero_plausible`, `positive_plausible`, `ambiguous`, or
     `insufficient_evidence`.
@@ -79,9 +86,12 @@ The model then receives the updated trace and may request another action.
   - Target structure is computed from non-award structural metadata and
     applicant/facts rows. Target final awards, per-applicant award allocations,
     and target label-derived fields are not used.
-  - Train priors use only `train.csv` joined to `prediction_values/train.csv`,
-    exclude the target itemid, and apply the target-date temporal filter when
-    available.
+  - The released controller defaults to
+    `dataset_release/data/ecthr_npd_cases.csv` joined to
+    `dataset_release/model_inputs/structured_tree/targets/train.csv`; it
+    excludes the target itemid and applies the target-date temporal filter when
+    available. Any caller-supplied sidecars require separate provenance
+    documentation.
   - The model should use this observation to decide whether the target is a
     `single_case_band`, `small_group_band`, `large_joined_case_band`, or
     `mass_joined_case_band`. It must not mechanically multiply a per-applicant
@@ -112,21 +122,26 @@ Use this as the benchmark-safe default. The target case may expose:
 - temporally prior train references in `few_shot`
 
 The target case must not expose raw Article 41 text, operative clauses, direct
-award snippets, claimed amounts, or target-derived fields.
+award snippets, claimed amounts, target outcome or zero-reason fields, target
+labels, or label-provenance fields. The strict default-query template is
+limited to strict-safe sources, so these fields cannot be recovered through a
+query action.
 
 ### `award_redacted_react`
 
-Use this only as an explicitly labelled extracted-information / relaxed
-ablation. It follows the v3 `award_redacted_full_info` contract: target final
-non-pecuniary awards and direct target-award derivatives remain redacted, while
-Article 41 structured claim-side information may be supplied after redaction.
+Restricted diagnostic only; requires `--allow_restricted_diagnostic`. It
+follows the v3 `award_redacted_full_info` contract: target final non-pecuniary
+awards and direct target-award derivatives remain redacted, while Article 41
+structured claim-side information may be supplied after redaction. Do not call
+it strict-input or a submitted-paper reproduction.
 
 ### `full_info_award_blind_react`
 
-Use this as the broad-information agent mode. The agent may access rich target
-features, structured Article 41 claim information, external factors, training
-reference features, and train-only award distributions, but it must remain blind
-to the target final awards.
+Restricted diagnostic only; requires `--allow_restricted_diagnostic`. The agent
+may access rich target features, structured Article 41 claim information,
+external factors, training reference features, and train-only award
+distributions, but it must remain blind to the target final awards. Do not call
+it strict-input or a submitted-paper reproduction.
 
 Blocked target fields include:
 
@@ -158,6 +173,19 @@ extractions.
 
 If a numeric non-pecuniary claim amount is visible, the controller treats it as
 a final-award cap and applies that cap automatically at `final_predict`.
+
+### `agentic_claim_blind_court_outcome_free_train_only`
+
+Restricted diagnostic only; requires `--allow_restricted_diagnostic`. It blocks
+target claims and court-outcome information but exposes a broader structured
+facts/metadata packet than `strict_react`. It is not a strict-input or
+submitted-paper reproduction mode.
+
+### `agentic_claim_aware_court_outcome_free_train_only`
+
+Restricted diagnostic only; requires `--allow_restricted_diagnostic`. It allows
+explicit target claim/request fields while blocking target court-outcome
+information. It is not a strict-input or submitted-paper reproduction mode.
 
 ## Final Action
 

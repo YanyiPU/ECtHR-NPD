@@ -1,0 +1,14 @@
+{
+  "version": "current_internal_case_table_2026-09-13",
+  "source": "Header-only snapshot of current clean/data/ecthr_npd_cases.csv; not a completeness or historical reproduction certificate",
+  "columns": [
+    "itemid", "hudoc_url", "judgementdate", "chrono_date", "judgment_year", "split", "test_view", "test_challenging_view",
+    "respondent_state", "country_alpha2", "hudoc_decision_body", "court_formation", "is_grand_chamber", "case_importance",
+    "has_separate_opinion", "represented", "num_applicants", "num_violations_found", "has_mixed_outcome", "violated_articles",
+    "violated_articles_count", "violation_type", "app_sex_male_ratio", "app_sex_female_ratio", "app_sex_unknown_ratio",
+    "app_age_child_ratio", "app_age_adolescent_ratio", "app_age_adult_ratio", "app_age_elderly_ratio", "app_age_unknown_ratio",
+    "app_birth_year_median", "app_unique_nationality_count", "app_multi_nationality_flag", "rl_violation_type_procedural_ratio",
+    "rl_violation_type_both_ratio", "rl_violation_duration_months", "rl_violation_duration_months_missing_ratio",
+    "gdp_per_capita_current_usd", "gdp_constant_2015_usd", "gdp_per_capita_log1p", "gdp_constant_2015_log1p", "y_amount_eur", "y_binary"
+  ]
+}

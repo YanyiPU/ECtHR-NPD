@@ -1,6 +1,6 @@
 {
   "catboost_params": {
-    "allow_writing_files": true,
+    "allow_writing_files": false,
     "depth": 4,
     "early_stopping_rounds": null,
     "iterations": 700,
@@ -39,7 +39,16 @@
     "catboost",
     "lightgbm"
   ],
-  "optimization_policy": "train-only fit; validation/test metrics are reported only and are not used for early stopping or model selection",
+  "optimization_policy": "select a supplied candidate manifest by validation MAE with median AE tie-break; refit the selected candidate on train only",
+  "categorical_handling": {
+    "catboost": "native categorical pools",
+    "xgboost_lightgbm": "train-only one-hot with explicit missing and unknown-category dummies"
+  },
+  "historical_candidate_manifest": {
+    "status": "not_released",
+    "paper_protocol_requirement": "A paper-result reproduction requires the original candidate manifest; the runner fails closed unless the user supplies one."
+  },
+  "numeric_imputation": "training-split median; an entirely missing training feature is an error",
   "packages": {
     "catboost": "1.2.10",
     "joblib": "1.5.3",

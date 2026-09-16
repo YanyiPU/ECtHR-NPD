@@ -1,15 +1,7 @@
-# Train-Only Empirical Priors
+# Training-only empirical priors
 
-The actual empirical knowledge base for the agent condition is the set of
-train-derived CSV tables in this directory:
+No empirical CSV tables are distributed in this directory. Its `templates/` child holds wire-format schemas/examples only.
 
-- `article_award_distribution_train.csv`: article-level award priors.
-- `country_award_distribution_train.csv`: respondent-state award priors.
-- `article_country_award_distribution_train.csv`: article-by-state priors.
-- `article_single_violation_stats_train.csv`: legacy article-level
-  compatibility table used by the older controller path.
+Use `code/prepare_experiments.py prepare` and then `agent_knowledge_base/build_train_article_priors.py` as shown in [EXPERIMENTS.md](../../../docs/EXPERIMENTS.md). The builder derives article, country, article-country and legacy article compatibility tables from the public train subset, in a fresh directory outside the dataset package. Supply that directory as `--prior_dir` to the controller.
 
-The `templates/` subdirectory intentionally contains only schemas and
-examples for prior wire formats. It is not expected to contain the full
-train priors. No test labels, prediction outputs, traces, or provider
-metadata are included in these empirical priors.
+A manifest pins the exact training IDs, metadata, labels and table hashes. Priors resolve from article-country to article, country and global article-weighted fallback. Validation/test labels never contribute. Historical `y_source` values are not in the public targets, so label-source counts remain blank with an explicit unavailable status; unknown is not fabricated as zero.

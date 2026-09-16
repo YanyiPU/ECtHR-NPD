@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from openai_compatible_client import ApiCallError, OpenAICompatibleClient
+from openai_compatible_client import ApiCallError, OpenAICompatibleClient, retry_extraction, schema_errors
 from pipeline_c_backbone_deterministic import layer1_deterministic
 from shared_compensation_evidence import KNOWN_CURRENCY_CODES, clean_text
 
@@ -502,11 +502,10 @@ def _claim_num_applicants(source_row: dict[str, Any] | None) -> int | None:
         return None
     candidates = [
         ((source_row.get("facts_procedure") or {}).get("num_applicants")),
-        ((source_row.get("core_case") or {}).get("num_applicants_proxy")),
         source_row.get("n_applicants"),
     ]
     for value in candidates:
-        if isinstance(value, int) and value > 0:
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
             return value
     return None
 
@@ -1121,12 +1120,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--itemids", nargs="+", default=None)
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--concurrency", type=int, default=int(os.environ.get("EXTRACTION_CONCURRENCY", "8")))
-    parser.add_argument("--max-retries", type=int, default=int(os.environ.get("EXTRACTION_MAX_RETRIES", "3")))
+    parser.add_argument("--max-retries", type=int, choices=range(11), default=int(os.environ.get("EXTRACTION_MAX_RETRIES", "3")))
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--regex-only", action="store_true")
+    parser.add_argument("--workspace-root", type=Path, default=None,
+                        help="Read local sources/scaffold and write runs here; use installed prompts and schemas.")
     return parser.parse_args()
+
+
+def configure_workspace(root: Path) -> None:
+    global DATASET_ROOT, INPUT_JSONL, SPLITS_DIR, RUNS_ROOT
+    DATASET_ROOT = root.resolve()
+    INPUT_JSONL = DATASET_ROOT / "extraction" / "outputs" / "case_features_labels.jsonl"
+    SPLITS_DIR = DATASET_ROOT / "splits"
+    RUNS_ROOT = DATASET_ROOT / "extraction" / "runs" / "pipeline_c_backbone"
 
 
 def load_json(path: Path) -> Any:
@@ -1209,9 +1218,8 @@ def layer3_crossval(regex: dict[str, Any], llm: dict[str, Any] | None) -> dict[s
             if llm_val is None:
                 return True, "both_missing"
             if llm_is_non_eur(head):
-                # Regex can't reliably recover inline EUR conversions for legacy
-                # non-EUR awards; do not treat that validator gap as a mismatch.
-                return True, "llm_only_non_eur"
+                # A missing currency validator is missing evidence, not agreement.
+                return None, "llm_only_non_eur"
             return None, "validator_missing"
         if llm_val is None:
             return False, "llm_missing"
@@ -1238,7 +1246,7 @@ def layer3_crossval(regex: dict[str, Any], llm: dict[str, Any] | None) -> dict[s
         "costs_match": costs_match,
         "costs_status": costs_status,
         "claim_award_validation": claim_award_validation.get("heads") or {},
-        "flag_for_review": any(value is False for value in (non_pec_match, pec_match, costs_match)) or bool(claim_award_validation.get("flag_for_review")),
+        "flag_for_review": non_pec_status != "match" or any(value is False for value in (pec_match, costs_match)) or bool(claim_award_validation.get("flag_for_review")),
         **({"notes": notes} if notes else {}),
     }
 
@@ -1268,7 +1276,7 @@ def build_final_awards(regex: dict[str, Any], llm: dict[str, Any] | None, crossv
             return llm_val, "llm"
         if per_applicant_val is not None:
             return per_applicant_val, "llm_per_applicant_sum"
-        return None, "not_awarded"
+        return None, "not_found_in_extraction"
 
     non_pec_eur, non_pec_src = resolve_eur("non_pecuniary")
     pec_eur, pec_src = resolve_eur("pecuniary")
@@ -1281,7 +1289,7 @@ def build_final_awards(regex: dict[str, Any], llm: dict[str, Any] | None, crossv
         if bundled_award_eur is not None:
             bundled_src = "llm_per_applicant_sum"
     if bundled_src is None:
-        bundled_src = "not_awarded"
+        bundled_src = "not_found_in_extraction"
 
     satisfaction_sufficient = (llm_awards.get("non_pecuniary") or {}).get("satisfaction_sufficient", False)
     if satisfaction_sufficient and non_pec_eur is None:
@@ -1417,15 +1425,7 @@ def _coerce_llm_types(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_llm_result(result: dict[str, Any], schema: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    try:
-        import jsonschema  # type: ignore
-        validator = jsonschema.Draft202012Validator(schema)
-        for err in validator.iter_errors(result):
-            loc = ".".join(str(x) for x in err.absolute_path) or "<root>"
-            errors.append(f"{loc}: {err.message}")
-    except Exception:
-        pass
+    errors = schema_errors(result, schema)
     for field in ("itemid", "article_41_applied", "claims", "awards", "award_per_applicant", "reasoning"):
         if field not in result:
             errors.append(f"missing required top-level field: {field}")
@@ -1713,25 +1713,34 @@ def compact_compensation_result(
     fallback_per_applicant = []
     if not (parsed.get("award_per_applicant") or []):
         fallback_per_applicant = awards_regex.get("award_per_applicant") or []
+    final_awards = build_final_awards(awards_regex, parsed, cross_validation)
+    if article_41_extraction is None:
+        # A regex-only projection is not an LLM result; missing amounts also
+        # do not establish that the court awarded nothing under that head.
+        for key, value in final_awards.items():
+            if key.endswith("_source") and isinstance(value, str) and value.startswith("llm"):
+                final_awards[key] = value.replace("llm", "deterministic", 1)
     return {
         "itemid": itemid,
+        "extraction_mode": "llm" if article_41_extraction is not None else "deterministic_regex",
         "article_41_extraction": parsed,
         "award_per_applicant_fallback": fallback_per_applicant,
         "cross_validation": cross_validation,
-        "final_awards": build_final_awards(awards_regex, parsed, cross_validation),
+        "final_awards": final_awards,
     }
 
 
+@retry_extraction
 def run_one_case(
     itemid: str,
     row: dict[str, Any],
-    client: OpenAICompatibleClient,
+    client: OpenAICompatibleClient | None,
     system_prompt: str,
     schema: dict[str, Any],
-    max_retries: int = 1,  # kept for backward-compat with the standalone CLI; ignored by design
+    max_retries: int = 1,
     regex_only: bool = False,
 ) -> dict[str, Any]:
-    """Single-shot pipeline C execution.
+    """Pipeline C attempt, wrapped in a bounded validation/API retry loop.
 
     Returns one of:
     - {status: "success", result, usage, elapsed_seconds}            (LLM path or regex_only path)
@@ -1744,7 +1753,7 @@ def run_one_case(
     appendix_table_text = claim_inputs.get("appendix_table_text") or ""
     article_41_text = claim_inputs.get("article_41_text") or ""
     conclusion_header = operative_text[:500]
-    num_applicants = ((row.get("facts_procedure") or {}).get("num_applicants")) or ((row.get("core_case") or {}).get("num_applicants_proxy"))
+    num_applicants = _claim_num_applicants(row)
     input_snapshot = build_c_input_snapshot(row)
     awards_regex = layer1_deterministic(
         operative_text,
@@ -1756,7 +1765,8 @@ def run_one_case(
 
     usage_total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     if regex_only:
-        crossval = {"non_pec_match": True, "pecuniary_match": True, "costs_match": True, "flag_for_review": False}
+        crossval = {"non_pec_match": None, "pecuniary_match": None, "costs_match": None,
+                    "flag_for_review": True, "validation_status": "not_cross_validated_regex_only"}
         return {
             "status": "success",
             "itemid": itemid,
@@ -1768,6 +1778,8 @@ def run_one_case(
             "result": compact_compensation_result(itemid, awards_regex, None, crossval, source_row=row),
         }
 
+    if client is None:
+        raise ValueError("An API client is required unless regex_only=True")
     messages = prompt_messages(system_prompt, schema, row, include_schema_in_payload=not client.use_json_schema)
     try:
         parsed, usage = client.chat_json(messages=messages, schema=schema, schema_name="pipeline_c_backbone")
@@ -1833,11 +1845,19 @@ def write_per_split_results(run_dir: Path, split_to_ids: dict[str, list[str]], s
 
 def main() -> None:
     args = parse_args()
+    if getattr(args, "workspace_root", None) is not None:
+        configure_workspace(args.workspace_root)
+    if args.concurrency < 1:
+        raise ValueError("--concurrency must be positive")
+    if args.max_cases is not None and args.max_cases < 1:
+        raise ValueError("--max-cases must be positive")
+    if args.run_name is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.run_name):
+        raise ValueError("--run-name must be a simple filename component")
     system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
     schema = load_json(SCHEMA_PATH)
     run_dir = make_run_dir(args.run_name)
 
-    split_to_ids = {split: load_split_ids(split) for split in args.splits}
+    split_to_ids = {} if args.itemids else {split: load_split_ids(split) for split in args.splits}
     if args.itemids:
         unique_ids = dedupe_preserve_order([str(x) for x in args.itemids])
         split_to_ids["manual_itemids"] = unique_ids
@@ -1881,7 +1901,7 @@ def main() -> None:
         print(json.dumps(run_metadata, ensure_ascii=False, indent=2))
         return
 
-    client = OpenAICompatibleClient.from_env()
+    client = None if args.regex_only else OpenAICompatibleClient.from_env()
     start = time.perf_counter()
     success_rows: dict[str, dict[str, Any]] = {}
     failure_rows: list[dict[str, Any]] = []
@@ -1952,6 +1972,8 @@ def main() -> None:
     }
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if failure_rows:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
