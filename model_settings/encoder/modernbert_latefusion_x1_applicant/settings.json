@@ -1,4 +1,5 @@
 {
+  "release_reproducibility_status": "blocked: the released generic encoder scaffold is example-only; the original architecture, checkpoint, historical text inputs, and predictions are not bundled",
   "architecture": "late fusion regression: encoder CLS/chunk-pooled text representation + structured MLP (60 X features -> 768 dims) concatenated before a single regression head; no separate zero-positive classifier; no binary training objective",
   "baseline": "ModernBERT-base 8K late fusion X1_applicant_enhanced",
   "batch_size": 1,

@@ -1,19 +1,11 @@
-# Model Settings
+# Experiment settings
 
-This folder records the current tree, retrieval, and encoder settings
-from the latest synchronized tree/retrieval/encoder package. It includes
-settings and training/config files only; prediction CSVs,
-metrics tables, checkpoints, embeddings, and neighbor traces are not
-included.
+Run new experiments from the single public dataset root with `--dataset-release .`; no dataset-version selection or private feature matrix is required. See [EXPERIMENTS.md](../docs/EXPERIMENTS.md) for complete commands.
 
-- `tree/strict_trainonly_50_feature_tree_regression/`: CatBoost,
-  XGBoost, and LightGBM pure-regression tree setting. The public code
-  includes CatBoost, XGBoost, and LightGBM reproduction scripts.
-- `retrieval/strict_bm25_pfme_knn/`: strict BM25 PFME-KNN retrieval
-  setting using train-only corpus and temporal filtering.
-- `retrieval/strict_bge_m3_dense_text_knn/`: strict BGE-M3 dense KNN
-  retrieval setting using train-only corpus and temporal filtering.
-- `retrieval/strict_bge_m3_sparse_text_knn/`: strict BGE-M3 sparse KNN
-  retrieval setting using train-only corpus and temporal filtering.
-- `encoder/`: current strict encoder and late-fusion ablation settings.
-- `prompting/`: zero-shot, CoT, and CoT + few-shot prompting settings.
+The active public feature representation is defined in `code/baselines/data/public_adapter.py`: 20 predictors derived from readable case columns. It excludes identifiers, split/view fields, targets, beneficiary/allocation information, and target status. GDP transforms and judgment month are computed at runtime. Training alone determines imputation and categorical vocabularies.
+
+Settings under `tree/strict_trainonly_50_feature_tree_regression/` are retained historical configuration records. The directory name and internal 48-column schema are not the public feature contract and are not required inputs. The tree runner detects the public tables and selects the public feature schema. Historical X0–X3 column mappings and validation candidate manifests are unavailable; neither schema is certified as historical X1.
+
+Retrieval scripts implement training-only references, strictly earlier judgment dates, shared violated Articles, top-20 median aggregation, and a training-median fallback. Structured kNN records its explicit new-run metric and preprocessing choices. Text retrieval requires reviewed FACTS inputs.
+
+`encoder/train_paper.py` implements the specified Table 22 architecture for new experiments using local backbone files and reviewed FACTS. Historical checkpoints, exact training arguments, and provider prediction artifacts are not supplied. Prompt templates and controller settings are source implementations, not archived requests or evidence of reproduced paper scores.

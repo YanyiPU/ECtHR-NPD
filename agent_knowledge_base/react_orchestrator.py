@@ -16,11 +16,12 @@ import copy
 import csv
 import importlib.util
 import json
+import math
 import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -30,7 +31,6 @@ sys.dont_write_bytecode = True
 
 KB_DIR = Path(__file__).resolve().parent
 PACKAGE_ROOT = KB_DIR.parent
-DATASET_RELEASE_DIR = Path(os.environ.get("ECTHR_NPD_DATASET_RELEASE", str(PACKAGE_ROOT / "dataset_release")))
 STRICT_REACT = "strict_react"
 AWARD_REDACTED_REACT = "award_redacted_react"
 FULL_INFO_AWARD_BLIND_REACT = "full_info_award_blind_react"
@@ -47,12 +47,12 @@ REACT_MODES = {
     CLAIM_BLIND_COURT_OUTCOME_FREE_REACT,
     CLAIM_AWARE_COURT_OUTCOME_FREE_REACT,
 }
+RESTRICTED_DIAGNOSTIC_REACT_MODES = REACT_MODES - {STRICT_REACT}
 INFERENCE_MODES = {"zero_shot", "few_shot"}
 CONTEXT_POLICIES = {"lazy", "eager"}
 EXECUTION_MODES = {"react", "compact_final", "react_compact_memory"}
 ACTION_PROTOCOL_ID = "react_action_protocol"
-DEFAULT_TRAIN_CSV = DATASET_RELEASE_DIR / "data" / "ecthr_npd_cases.csv"
-DEFAULT_TRAIN_LABEL_CSV = DATASET_RELEASE_DIR / "model_inputs" / "structured_tree" / "targets" / "train.csv"
+PAPER_PRESET = "paper_protocol_v1_new_implementation"
 REFERENCE_REASONING_PATH = Path(os.environ.get("ECTHR_NPD_REASONING_LAYER_CSV", "your_path/reasoning_layer.csv"))
 TARGET_REASONING_PATH = REFERENCE_REASONING_PATH
 REFERENCE_APPLICANT_PATH = Path(os.environ.get("ECTHR_NPD_APPLICANT_CSV", "your_path/applicant.csv"))
@@ -82,6 +82,37 @@ TARGET_QUERY_TEMPLATE = {
         "include_reason",
         "sufficient",
         "dismissed_reason",
+    ],
+    "max_chars": 20000,
+}
+
+# This is the only target-query template used by the public default.  It is
+# deliberately limited to the strict packet built in build_strict_case_inputs:
+# no target Article 41 material, claim/request fields, target outcome fields,
+# or label/provenance fields are present in those sources.
+STRICT_TARGET_QUERY_TEMPLATE = {
+    "sources": [
+        "standard_prompting_input",
+        "metadata",
+        "extracted_hints",
+    ],
+    "field_contains": [
+        "combined_input_text",
+        "oracle_violated_articles",
+        "violated_articles_text",
+        "respondent_state",
+        "judgment_year",
+        "court_formation",
+        "case_importance",
+        "num_applicants",
+        "is_joint_application",
+        "victim_relationship",
+        "vulnerability",
+        "is_repetitive_case",
+        "state_remedial_measures",
+        "violation_type",
+        "violation_subtype",
+        "violation_duration_months",
     ],
     "max_chars": 20000,
 }
@@ -183,6 +214,41 @@ REFERENCE_FEATURE_DEFAULT_FIELD_CONTAINS = [
     "dismissed_reason",
     "exclusion",
 ]
+
+STRICT_REFERENCE_FEATURE_FIELD_CONTAINS = [
+    "violation",
+    "violation_subtype",
+    "reasoning_factor",
+    "finding",
+    "num_applicants",
+    "application_count",
+    "represented",
+    "case_importance",
+    "decision_body",
+    "country",
+    "gdp",
+    "vulnerability",
+    "repetitive",
+    "detention",
+    "delay",
+]
+
+STRICT_REACT_RUBRIC = """
+Strict ReAct input contract:
+- This is the public default. Use only the strictly sanitized standard input,
+  oracle violated articles, safe metadata, non-claim/non-award extracted hints,
+  train-only priors, and temporally prior train-reference anchors.
+- Do not request, infer, or treat as observed any target Article 41 or just
+  satisfaction text, target claim/request field or amount, operative clause,
+  target award/outcome/zero-reason field, target label, or label provenance.
+- Treat 0 EUR as a valid continuous prediction. Calibrate against train-only
+  priors and temporally prior references; do not use a separate target
+  zero/positive label or a claim-derived cap.
+- Use assess_aggregation_pattern for case-level scale. Do not mechanically
+  multiply a per-applicant amount.
+- Before final_predict, use only controller observations permitted by this
+  strict contract. The final output remains only {"award_eur": number}.
+"""
 
 CLAIM_BLIND_REFERENCE_FEATURE_FIELD_CONTAINS = [
     "violation",
@@ -288,6 +354,8 @@ ACTION_SCHEMA = {
 
 def allowed_actions_for_state(state: dict[str, Any]) -> list[str]:
     actions = set(ALLOWED_ACTIONS)
+    if state.get("paper_preset"):
+        actions -= {"load_relevant_modules", "assess_zero_positive_evidence"}
     if state.get("react_mode") in COURT_OUTCOME_FREE_REACT_MODES:
         actions.discard("assess_zero_positive_evidence")
     return sorted(actions)
@@ -471,6 +539,8 @@ GENERATED_REASONING_SUMMARY_KEYS = {
 }
 TARGET_ALWAYS_BLOCKED_KEYS = {
     "all_scl_citations",
+    "perapp_unique_beneficiary_category_count",
+    "perapp_has_joint_beneficiary_category_flag",
 }
 TARGET_FINAL_AWARD_TEXT_REDACTION = "[TARGET_FINAL_AWARD_TEXT_REDACTED]"
 TARGET_AWARD_VALUE_EXEMPT_PATH_TERMS = (
@@ -596,6 +666,7 @@ def load_module(module_name: str, path: Path) -> Any:
 
 
 V2 = load_module("npd_v3_orchestrator_v2_runtime", KB_DIR / "orchestrator_v2.py")
+PRIOR_CONTRACT = load_module("npd_prior_contract_runtime", KB_DIR / "prior_contract.py")
 
 
 def claim_blind_action_protocol_text() -> str:
@@ -615,20 +686,40 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--case_file", required=True)
     parser.add_argument("--case_id", default=None, help="When case_file is CSV/JSONL, select this itemid.")
-    parser.add_argument("--react_mode", default=STRICT_REACT, choices=sorted(REACT_MODES))
-    parser.add_argument("--inference_mode", default="zero_shot", choices=sorted(INFERENCE_MODES))
+    parser.add_argument(
+        "--react_mode",
+        default=STRICT_REACT,
+        choices=sorted(REACT_MODES),
+        help=(
+            "Public default: strict_react. All other modes are restricted "
+            "diagnostics and require --allow_restricted_diagnostic."
+        ),
+    )
+    parser.add_argument(
+        "--allow_restricted_diagnostic",
+        action="store_true",
+        help=(
+            "Required before a non-strict mode can run. Such runs may not be "
+            "described as strict-input or submitted-paper reproductions."
+        ),
+    )
+    parser.add_argument("--paper_preset", action="store_true", help="New Table 24/25 implementation, not a recovered historical run.")
+    parser.add_argument("--inference_mode", default=None, choices=sorted(INFERENCE_MODES))
     parser.add_argument("--execution_mode", default="react", choices=sorted(EXECUTION_MODES))
     parser.add_argument("--target_context_policy", default="lazy", choices=sorted(CONTEXT_POLICIES))
     parser.add_argument("--reference_context_policy", default="lazy", choices=sorted(CONTEXT_POLICIES))
     parser.add_argument("--kb_dir", default=str(KB_DIR))
-    parser.add_argument("--train_csv", default=str(DEFAULT_TRAIN_CSV))
-    parser.add_argument("--train_label_csv", default=str(DEFAULT_TRAIN_LABEL_CSV))
+    parser.add_argument("--dataset-release", default=None, help="Explicit dataset root or selected clean root; no frozen fallback")
+    parser.add_argument("--dataset-version", choices=["corrected", "paper_reference"], default="corrected")
+    parser.add_argument("--train_csv", default=None, help="Optional metadata override, must match selected training cohort")
+    parser.add_argument("--train_label_csv", default=None, help="Optional labels override, must match selected training cohort")
+    parser.add_argument("--prior_dir", default=None, help="Verified empirical-prior bundle for the exact training metadata and targets")
     parser.add_argument("--top_k", type=int, default=5)
-    parser.add_argument("--max_steps", type=int, default=10)
+    parser.add_argument("--max_steps", type=int, default=None)
     parser.add_argument("--dry_run", action="store_true", help="Build a deterministic trace without model calls.")
     parser.add_argument("--live", action="store_true", help="Call an OpenAI-compatible endpoint for action selection.")
     parser.add_argument("--api_base", default=DEFAULT_API_BASE)
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=None)
     parser.add_argument("--api_key_file", default=None)
     parser.add_argument("--api_key_env", default="EXTRACTION_API_KEY")
     parser.add_argument("--provider_json_schema", action="store_true")
@@ -637,7 +728,43 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prediction_out", default=None)
     parser.add_argument("--compact_packet_file", default=None, help="Use a prebuilt compact packet for compact_final mode.")
     parser.add_argument("--compact_packet_out", default=None, help="Write the compact packet built by compact_final mode.")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.paper_preset:
+        if args.react_mode != STRICT_REACT or args.execution_mode != "react" or args.top_k != 5:
+            parser.error("--paper_preset requires strict_react, execution_mode=react, and top_k=5")
+        if args.inference_mode not in (None, "few_shot") or args.max_steps not in (None, 12):
+            parser.error("--paper_preset requires reference-enabled few_shot and max_steps=12")
+        if args.live and (not args.model or not args.trace_out):
+            parser.error("a live --paper_preset requires explicit --model and --trace_out; historical provider snapshot is unknown")
+        args.inference_mode, args.max_steps = "few_shot", 12
+    else:
+        args.inference_mode = args.inference_mode or "zero_shot"
+        args.max_steps = args.max_steps if args.max_steps is not None else 10
+    if args.top_k < 1 or args.max_steps < 1:
+        parser.error("top_k and max_steps must be positive")
+    args.model = args.model or DEFAULT_MODEL
+    try:
+        require_explicit_restricted_diagnostic_opt_in(
+            args.react_mode,
+            args.allow_restricted_diagnostic,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    return args
+
+
+def require_explicit_restricted_diagnostic_opt_in(
+    react_mode: str,
+    allow_restricted_diagnostic: bool,
+) -> None:
+    """Keep broader target-input modes out of the public default path."""
+    if react_mode in RESTRICTED_DIAGNOSTIC_REACT_MODES and not allow_restricted_diagnostic:
+        raise ValueError(
+            f"{react_mode} is a restricted diagnostic mode because it may expose "
+            "broader target information than strict_react. Re-run with "
+            "--allow_restricted_diagnostic only for an explicitly labelled diagnostic; "
+            "do not describe that run as a strict-input or submitted-paper reproduction."
+        )
 
 
 def load_case(path: Path, case_id: str | None = None) -> dict[str, Any]:
@@ -999,10 +1126,16 @@ def build_strict_case_inputs(case: dict[str, Any]) -> dict[str, Any]:
         "extracted_hints": extracted_hints,
     }
     sanitized, removed_paths, text_redactions = sanitize_for_react_mode(raw_inputs, STRICT_REACT)
+    # The keyword-based strict redactor removes Article 41/claim/award lines.
+    # A second pass also removes a known target award value when it appears in
+    # otherwise innocuous-looking standard-input prose.
+    sanitized, target_value_redactions = redact_target_final_award_text(sanitized, case)
     sanitized["target_redaction_report"] = {
         "removed_paths": sorted(set([*standard_redactions, *removed_paths])),
         "strict_text_redaction_marker": STRICT_TEXT_REDACTION,
         "strict_text_redaction_count": text_redactions,
+        "target_final_award_text_redaction_marker": TARGET_FINAL_AWARD_TEXT_REDACTION,
+        "target_final_award_text_redaction_count": target_value_redactions,
     }
     return sanitized
 
@@ -1335,9 +1468,9 @@ def distribution_row_to_stats(row: dict[str, str], relative_path: Path) -> dict[
         "median_all": parse_float(row.get("median_all")),
         "p10_all": parse_float(row.get("p10_all")),
         "p90_all": parse_float(row.get("p90_all")),
-        "zero_reason_count": parse_int(row.get("zero_reason_count"), default=0),
-        "amount_direct_count": parse_int(row.get("amount_direct_count"), default=0),
-        "proxy_keep72_count": parse_int(row.get("proxy_keep72_count"), default=0),
+        "label_provenance_status": str(
+            row.get("label_provenance_status") or "unavailable_status_not_recorded"
+        ).strip(),
         "anchor_basis": "positive_amounts_if_available_else_all",
         "table_source_csv": str(relative_path).replace("\\", "/"),
     }
@@ -1378,6 +1511,16 @@ def weighted_distribution_stats(
         numerator = sum(float(stats[key]) * int(stats["sample_count"]) for stats in table.values())
         return numerator / total_n
 
+    provenance_statuses = {
+        str(stats.get("label_provenance_status") or "unavailable_status_not_recorded")
+        for stats in table.values()
+    }
+    provenance_status = (
+        next(iter(provenance_statuses))
+        if len(provenance_statuses) == 1
+        else "mixed_bucket_provenance_status"
+    )
+
     return {
         "sample_count": total_n,
         "positive_count": sum(int(stats.get("positive_count") or 0) for stats in table.values()),
@@ -1390,9 +1533,7 @@ def weighted_distribution_stats(
         "median_all": weighted_avg("median_all") if all(stats.get("median_all") is not None for stats in table.values()) else None,
         "p10_all": weighted_avg("p10_all") if all(stats.get("p10_all") is not None for stats in table.values()) else None,
         "p90_all": weighted_avg("p90_all") if all(stats.get("p90_all") is not None for stats in table.values()) else None,
-        "zero_reason_count": sum(int(stats.get("zero_reason_count") or 0) for stats in table.values()),
-        "amount_direct_count": sum(int(stats.get("amount_direct_count") or 0) for stats in table.values()),
-        "proxy_keep72_count": sum(int(stats.get("proxy_keep72_count") or 0) for stats in table.values()),
+        "label_provenance_status": provenance_status,
         "anchor_basis": "weighted_mean_of_article_distribution_anchors",
         "aggregation_method": "weighted_mean_of_article_distribution_anchors",
         "table_source_csv": str(source_path).replace("\\", "/"),
@@ -1420,18 +1561,24 @@ def compact_stats(stats: dict[str, Any] | None) -> dict[str, Any] | None:
     for key in ("aggregation_method",):
         if stats.get(key) not in (None, ""):
             output[key] = stats[key]
+    if stats.get("label_provenance_status") not in (None, ""):
+        output["label_provenance_status"] = stats["label_provenance_status"]
     return output
 
 
-def resolve_calibration(kb_dir: Path, route_state: dict[str, Any]) -> dict[str, Any]:
-    article_table = load_distribution_table(kb_dir, ARTICLE_DISTRIBUTION_RELATIVE_PATH, ["article"])
-    country_table = load_distribution_table(kb_dir, COUNTRY_DISTRIBUTION_RELATIVE_PATH, ["country_alpha2"])
+def resolve_calibration(kb_dir: Path, route_state: dict[str, Any], *, prior_dir: Path | None = None) -> dict[str, Any]:
+    root = prior_dir if prior_dir is not None else kb_dir
+    article_path = Path(ARTICLE_DISTRIBUTION_RELATIVE_PATH.name) if prior_dir is not None else ARTICLE_DISTRIBUTION_RELATIVE_PATH
+    country_path = Path(COUNTRY_DISTRIBUTION_RELATIVE_PATH.name) if prior_dir is not None else COUNTRY_DISTRIBUTION_RELATIVE_PATH
+    article_country_path = Path(ARTICLE_COUNTRY_DISTRIBUTION_RELATIVE_PATH.name) if prior_dir is not None else ARTICLE_COUNTRY_DISTRIBUTION_RELATIVE_PATH
+    article_table = load_distribution_table(root, article_path, ["article"])
+    country_table = load_distribution_table(root, country_path, ["country_alpha2"])
     article_country_table = load_distribution_table(
-        kb_dir,
-        ARTICLE_COUNTRY_DISTRIBUTION_RELATIVE_PATH,
+        root,
+        article_country_path,
         ["article", "country_alpha2"],
     )
-    global_stats = weighted_distribution_stats(article_table, ARTICLE_DISTRIBUTION_RELATIVE_PATH)
+    global_stats = weighted_distribution_stats(article_table, article_path)
 
     violated_articles = route_state.get("violated_articles") or []
     respondent_state = normalize_distribution_country(route_state.get("respondent_state"))
@@ -1531,9 +1678,9 @@ def resolve_calibration(kb_dir: Path, route_state: dict[str, Any]) -> dict[str, 
     calibration = {
         "minimum_support_n": V2.MIN_EMPIRICAL_SUPPORT_N,
         "distribution_tables": {
-            "article": str(ARTICLE_DISTRIBUTION_RELATIVE_PATH).replace("\\", "/"),
-            "country": str(COUNTRY_DISTRIBUTION_RELATIVE_PATH).replace("\\", "/"),
-            "article_country": str(ARTICLE_COUNTRY_DISTRIBUTION_RELATIVE_PATH).replace("\\", "/"),
+            "article": str(article_path).replace("\\", "/"),
+            "country": str(country_path).replace("\\", "/"),
+            "article_country": str(article_country_path).replace("\\", "/"),
         },
         "selection_policy": "article_country_if_supported_else_article_else_country_else_global",
         "global_available": global_stats is not None,
@@ -1638,6 +1785,7 @@ def split_application_numbers(value: Any) -> list[str]:
 def application_count(row: dict[str, Any]) -> int:
     values = [
         parse_int(row.get("application_count"), default=0),
+        parse_int(row.get("hudoc_application_count"), default=0),
         len(split_application_numbers(row.get("application_numbers_extracted"))),
         len(split_application_numbers(row.get("appno"))),
     ]
@@ -1880,6 +2028,8 @@ def reference_feature_key_is_blocked(key: Any, react_mode: str = CLAIM_BLIND_COU
     lowered = str(key or "").strip().lower()
     if not lowered:
         return True
+    if lowered in TARGET_ALWAYS_BLOCKED_KEYS:
+        return True
     if react_mode == CLAIM_AWARE_COURT_OUTCOME_FREE_REACT:
         if lowered in CLAIM_AWARE_COURT_OUTCOME_FREE_BLOCKED_EXACT_KEYS:
             return True
@@ -2036,6 +2186,8 @@ def target_information_catalog(case_inputs: dict[str, Any]) -> dict[str, Any]:
 
 
 def target_query_template_for_state(state: dict[str, Any]) -> dict[str, Any]:
+    if state.get("react_mode") == STRICT_REACT:
+        return STRICT_TARGET_QUERY_TEMPLATE
     if state.get("react_mode") == CLAIM_BLIND_COURT_OUTCOME_FREE_REACT:
         return CLAIM_BLIND_TARGET_QUERY_TEMPLATE
     if state.get("react_mode") == CLAIM_AWARE_COURT_OUTCOME_FREE_REACT:
@@ -2044,6 +2196,8 @@ def target_query_template_for_state(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def reference_feature_field_contains_for_state(state: dict[str, Any]) -> list[str]:
+    if state.get("react_mode") == STRICT_REACT:
+        return list(STRICT_REFERENCE_FEATURE_FIELD_CONTAINS)
     if state.get("react_mode") == CLAIM_BLIND_COURT_OUTCOME_FREE_REACT:
         return list(CLAIM_BLIND_REFERENCE_FEATURE_FIELD_CONTAINS)
     if state.get("react_mode") == CLAIM_AWARE_COURT_OUTCOME_FREE_REACT:
@@ -2249,6 +2403,8 @@ def retrieve_train_references(
     include_reference_features: bool = False,
     react_mode: str = CLAIM_BLIND_COURT_OUTCOME_FREE_REACT,
 ) -> dict[str, Any]:
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be a positive integer total reference budget")
     target_itemid = str(case.get("itemid") or "")
     target_articles = set(normalize_articles(case.get("violated_articles") or case.get("oracle_violated_articles") or case.get("violated_articles_text")))
     target_country = str(V2.first_non_empty(case, "country_alpha2", "respondent_country", "respondent") or "").strip().lower()
@@ -2281,12 +2437,15 @@ def retrieve_train_references(
             candidates.append(candidate)
 
     filtered, filter_trace = apply_domain_filters(candidates, target_applicants)
-    filtered.sort(key=lambda candidate: candidate["sim_score"], reverse=True)
+    filtered.sort(key=lambda candidate: (-candidate["sim_score"], str(candidate["row"].get("itemid") or "")))
 
     positive = [candidate for candidate in filtered if candidate["y_binary"] == 1]
     zero = [candidate for candidate in filtered if candidate["y_binary"] == 0]
-    selected_positive = positive[:top_k]
-    selected_zero = zero[:top_k]
+    # Table 24 caps the UNION of all exposed references at top_k, not top_k
+    # per class. Balanced quotas are a documented new implementation choice;
+    # the exact historical balancing/tie-order manifest is unavailable.
+    selected_positive = positive[: (top_k + 1) // 2]
+    selected_zero = zero[: top_k // 2]
     balanced_seen: set[str] = set()
     balanced: list[dict[str, Any]] = []
     for pool in (selected_positive, selected_zero, filtered):
@@ -2296,13 +2455,18 @@ def retrieve_train_references(
                 continue
             balanced.append(candidate)
             balanced_seen.add(itemid)
-            if len(balanced) >= top_k * 2:
+            if len(balanced) >= top_k:
                 break
-        if len(balanced) >= top_k * 2:
+        if len(balanced) >= top_k:
             break
+    balanced.sort(key=lambda candidate: (-candidate["sim_score"], str(candidate["row"].get("itemid") or "")))
+    selected_positive = [candidate for candidate in balanced if candidate["y_binary"] == 1]
+    selected_zero = [candidate for candidate in balanced if candidate["y_binary"] == 0]
 
     return {
         "retrieval_policy": "domain_multi_filter_then_similarity",
+        "reference_budget": top_k,
+        "selection_implementation": "bounded_balanced_v1_not_recovered_historical_policy",
         "reference_case_payload_policy": (
             "retrieved cases expose tabular/extraction feature rows only; "
             "raw judgment text, court-outcome, zero-reason, and label-derived feature columns are removed; "
@@ -2768,6 +2932,17 @@ def assess_aggregation_pattern_observation(state: dict[str, Any]) -> dict[str, A
 
 def selected_target_snapshot(state: dict[str, Any]) -> dict[str, Any]:
     case_inputs = state.get("case_inputs") or {}
+    if state.get("react_mode") == STRICT_REACT:
+        flattened: dict[str, Any] = {}
+        for source in ("standard_prompting_input", "metadata", "extracted_hints"):
+            if source in case_inputs:
+                flattened.update(flatten_for_query(case_inputs[source], (source,)))
+        return query_flat_values(
+            flattened,
+            [],
+            STRICT_TARGET_QUERY_TEMPLATE["field_contains"],
+            20000,
+        )
     if state.get("react_mode") in COURT_OUTCOME_FREE_REACT_MODES:
         flattened: dict[str, Any] = {}
         sources = [
@@ -2989,6 +3164,40 @@ def assess_zero_positive_evidence_observation(state: dict[str, Any]) -> dict[str
             ],
         }
 
+    if state.get("react_mode") == STRICT_REACT:
+        return {
+            "assessment_policy": "strict_react_train_priors_and_reference_anchors_only",
+            "target_snapshot_policy": (
+                "strictly sanitized standard input, safe metadata, and non-claim/non-award "
+                "extracted hints only; target Article 41, claim/request, court-outcome, "
+                "zero-explanation, label, and provenance fields are unavailable"
+            ),
+            "target_snapshot": target_snapshot,
+            "train_prior_zero_rates": {
+                "max_zero_rate": max_zero_rate,
+                "median_zero_rate": median_zero_rate,
+                "article_calibration_count": len(article_calibrations),
+                "source_split": "train",
+            },
+            "reference_balance": {
+                "candidate_counts": retrieval.get("candidate_counts"),
+                "positive": reference_award_summary(positive_refs),
+                "zero": reference_award_summary(zero_refs),
+                "source_split": "train",
+            },
+            "evidence_notes": [
+                "No target Article 41 or just-satisfaction text inspected.",
+                "No target claim/request field or amount inspected.",
+                "No target court-outcome, zero-explanation, label, or provenance field inspected.",
+                "No claim-derived cap is applied in strict_react.",
+            ],
+            "final_prediction_instruction": (
+                "Use only the strict target snapshot, train-only priors, and temporally prior "
+                "reference anchors as calibration evidence. The final action must output one "
+                "continuous award_eur number."
+            ),
+        }
+
     claim_state = first_snapshot_value(target_snapshot, "claim_non_pec_state")
     claim_amount = (
         first_snapshot_value(target_snapshot, "claim_non_pec_eur")
@@ -3117,12 +3326,20 @@ def build_state(
     train_label_csv: Path,
     target_context_policy: str,
     reference_context_policy: str,
+    prior_dir: Path | None = None,
+    dataset_version: str = "corrected",
 ) -> dict[str, Any]:
+    prior_dir = prior_dir or kb_dir / "modules" / "empirical"
+    prior_validation = PRIOR_CONTRACT.verify_prior_bundle(prior_dir, train_csv, train_label_csv, dataset_version=dataset_version)
     kb_index = V2.load_kb_index(kb_dir)
     modules = V2.index_modules(kb_index)
     route_state = route_state_for_case(case, react_mode)
-    calibration = resolve_calibration(kb_dir, route_state)
+    calibration = resolve_calibration(kb_dir, route_state, prior_dir=prior_dir)
     case_inputs = build_case_inputs(case, react_mode)
+    # Controller audit metadata is not a predictor. Keep the report internally
+    # instead of feeding its own blocked-field names back through the target
+    # leakage gate (or exposing removed source-path names to the actor).
+    redaction_report = case_inputs.pop("target_redaction_report", {})
     module_ids = selected_module_ids(case, route_state, react_mode)
     train_rows = load_train_rows(train_csv) if inference_mode == "few_shot" else []
     train_labels = load_train_labels(train_label_csv) if inference_mode == "few_shot" else {}
@@ -3168,6 +3385,8 @@ def build_state(
         "case_inputs": case_inputs,
         "selected_module_ids": module_ids,
         "empirical_calibration": calibration,
+        "prior_validation": prior_validation,
+        "internal_target_redaction_report": redaction_report,
         "train_rows": train_rows,
         "train_labels": train_labels,
         "retrieval_result": retrieval_result,
@@ -3186,6 +3405,8 @@ def module_observation(state: dict[str, Any], module_ids: list[str], include_tex
     records = []
     for module_id in module_ids:
         record = load_module_record(state["kb_dir"], state["modules"], module_id, state["react_mode"])
+        if state.get("paper_preset") and module_id in {ACTION_PROTOCOL_ID, "output_schema"}:
+            record = dict(record, text=live_system_prompt(state))
         if include_text:
             records.append(record)
         else:
@@ -3226,7 +3447,8 @@ def execute_action(state: dict[str, Any], action_object: dict[str, Any], include
                 },
                 "next_step": (
                     "Use query_target_information with recommended_target_query. "
-                    "Use load_relevant_modules instead of separate search_modules/load_module unless you need a custom module subset."
+                    + ("Use search_modules then load_module." if state.get("paper_preset") else
+                       "Use load_relevant_modules instead of separate search_modules/load_module unless you need a custom module subset.")
                 ),
             }
         return {
@@ -3305,8 +3527,21 @@ def execute_action(state: dict[str, Any], action_object: dict[str, Any], include
                 "leakage_audit": leakage_audit,
             }
         award = parse_float(action_input.get("award_eur"))
-        if award is None or award < 0:
+        if award is None or not math.isfinite(award) or award < 0:
             return {"error": "final_predict_requires_non_negative_numeric_award_eur"}
+        diagnostics = {}
+        if state.get("paper_preset"):
+            required = {"rationale_summary", "zero_positive_decision", "aggregation_scale_decision", "uncertainty"}
+            if set(action_input) != required | {"award_eur"}:
+                return {"error": "paper_final_predict_requires_amount_and_all_diagnostic_fields"}
+            if any(not isinstance(action_input[key], str) or not action_input[key].strip() for key in required):
+                return {"error": "paper_diagnostic_fields_must_be_nonempty_strings"}
+            if action_input["uncertainty"] not in {"low", "medium", "high"}:
+                return {"error": "paper_uncertainty_must_be_low_medium_or_high"}
+            expected_decision = "zero" if award == 0 else "positive"
+            if action_input["zero_positive_decision"] != expected_decision:
+                return {"error": "paper_zero_positive_decision_conflicts_with_amount"}
+            diagnostics = {key: action_input[key] for key in required}
         cap = target_claim_cap_from_snapshot(selected_target_snapshot(state))
         uncapped_award = float(award)
         cap_allowed = state["react_mode"] in {
@@ -3318,7 +3553,7 @@ def execute_action(state: dict[str, Any], action_object: dict[str, Any], include
         cap_applied = cap_value is not None and uncapped_award > float(cap_value)
         final_award = float(cap_value) if cap_applied else uncapped_award
         return {
-            "prediction": {"award_eur": final_award},
+            "prediction": {"award_eur": final_award, **diagnostics},
             "accepted": True,
             "controller_leakage_check": leakage_audit,
             "claim_cap_check": {
@@ -3394,6 +3629,16 @@ def deterministic_dry_run_trace(state: dict[str, Any]) -> dict[str, Any]:
                 "action_input": {},
             },
         )
+    if state.get("paper_preset"):
+        planned = [
+            replacement
+            for action in planned
+            for replacement in (
+                [dict(action, action="search_modules"), dict(action, action="load_module")]
+                if action["action"] == "load_relevant_modules" else
+                [] if action["action"] == "assess_zero_positive_evidence" else [action]
+            )
+        ]
     events = []
     for idx, action_object in enumerate(planned, start=1):
         observation = execute_action(state, action_object, include_module_text=False)
@@ -3410,7 +3655,12 @@ def deterministic_dry_run_trace(state: dict[str, Any]) -> dict[str, Any]:
         "final_action_template": {
             "thought_summary": "Short calibration summary. The controller will run the leakage gate automatically.",
             "action": "final_predict",
-            "action_input": {"award_eur": 0.0},
+            "action_input": {
+                "award_eur": 0.0,
+                **({"rationale_summary": "Required model-supplied summary; not a prediction.",
+                    "zero_positive_decision": "zero", "aggregation_scale_decision": "Required model-supplied summary.",
+                    "uncertainty": "high"} if state.get("paper_preset") else {}),
+            },
         },
     }
 
@@ -3704,17 +3954,9 @@ def build_client(
     provider_json_schema: bool,
 ) -> Any:
     client_path_text = os.environ.get("ECTHR_NPD_OPENAI_COMPATIBLE_CLIENT", "").strip()
-    client_path = Path(client_path_text) if client_path_text else None
-    if client_path is None:
-        raise RuntimeError(
-            "Live provider client code is not included in the public release. "
-            "Use --dry_run, or set ECTHR_NPD_OPENAI_COMPATIBLE_CLIENT to your own client module path."
-        )
+    client_path = Path(client_path_text) if client_path_text else PACKAGE_ROOT / "extraction_pipeline/code/openai_compatible_client.py"
     if not client_path.exists():
-        raise RuntimeError(
-            "Live provider client code is not included in the public release. "
-            "Use --dry_run, or set ECTHR_NPD_OPENAI_COMPATIBLE_CLIENT to your own client module path."
-        )
+        raise RuntimeError("Missing compatible client module: " + str(client_path))
     client_mod = load_module(
         "react_openai_compatible_client_runtime",
         client_path,
@@ -3729,6 +3971,21 @@ def build_client(
 
 
 def live_system_prompt(state: dict[str, Any]) -> str:
+    if state.get("paper_preset"):
+        return (
+            "You are a bounded ReAct actor estimating one nonnegative case-level NPD amount in EUR. "
+            "Return one JSON object with thought_summary (a brief decision summary, not private chain-of-thought), "
+            "action, and action_input. Use only controller observations. Target claims, awards, Article 41 "
+            "reasoning and target-derived allocations are forbidden. Reference awards are training-only anchors. "
+            "Do not sum awards across Articles or blindly multiply by applicant count. "
+            f"Allowed actions: {', '.join(allowed_actions_for_state(state))}. "
+            f"Required before final_predict: {', '.join(required_actions_before_final(state))}. "
+            "Use search_modules followed by load_module. The controller applies a leakage gate before acceptance. "
+            "final_predict.action_input must contain exactly award_eur, rationale_summary, "
+            "zero_positive_decision ('zero' or 'positive', consistent with award_eur), "
+            "aggregation_scale_decision, and uncertainty ('low', 'medium', or 'high'). "
+            "Diagnostic text must be short explanatory summaries. No external browsing or direct file access."
+        )
     protocol = load_module_record(state["kb_dir"], state["modules"], ACTION_PROTOCOL_ID, state["react_mode"])["text"]
     mandatory_actions = required_actions_before_final(state)
     return (
@@ -3761,6 +4018,8 @@ def compact_trace_for_model(events: list[dict[str, Any]]) -> str:
 
 
 def calibration_rubric_for_state(state: dict[str, Any]) -> str:
+    if state.get("react_mode") == STRICT_REACT:
+        return STRICT_REACT_RUBRIC
     if state.get("react_mode") == CLAIM_BLIND_COURT_OUTCOME_FREE_REACT:
         return CLAIM_BLIND_COURT_OUTCOME_FREE_RUBRIC
     if state.get("react_mode") == CLAIM_AWARE_COURT_OUTCOME_FREE_REACT:
@@ -4099,13 +4358,14 @@ def required_actions_before_final(state: dict[str, Any]) -> list[str]:
         required.append("query_target_information")
     required.extend(
         [
-            "load_relevant_modules OR (search_modules AND load_module)",
+            ("search_modules AND load_module" if state.get("paper_preset") else
+             "load_relevant_modules OR (search_modules AND load_module)"),
             "resolve_empirical_priors",
         ]
     )
     if state["inference_mode"] == "few_shot":
         required.append("retrieve_train_references")
-        if state.get("react_mode") not in COURT_OUTCOME_FREE_REACT_MODES:
+        if not state.get("paper_preset") and state.get("react_mode") not in COURT_OUTCOME_FREE_REACT_MODES:
             required.append("assess_zero_positive_evidence")
         required.append("assess_aggregation_pattern")
     return required
@@ -4117,11 +4377,12 @@ def missing_required_actions(state: dict[str, Any], completed_actions: set[str])
         missing.append("inspect_case")
     if state.get("target_context_policy") == "lazy" and "query_target_information" not in completed_actions:
         missing.append("query_target_information")
-    module_loaded = "load_relevant_modules" in completed_actions or (
+    module_loaded = (not state.get("paper_preset") and "load_relevant_modules" in completed_actions) or (
         "search_modules" in completed_actions and "load_module" in completed_actions
     )
     if not module_loaded:
-        missing.append("load_relevant_modules OR (search_modules AND load_module)")
+        missing.append("search_modules AND load_module" if state.get("paper_preset") else
+                       "load_relevant_modules OR (search_modules AND load_module)")
     if "resolve_empirical_priors" not in completed_actions:
         missing.append("resolve_empirical_priors")
     if state["inference_mode"] == "few_shot":
@@ -4129,6 +4390,7 @@ def missing_required_actions(state: dict[str, Any], completed_actions: set[str])
             missing.append("retrieve_train_references")
         if (
             state.get("react_mode") not in COURT_OUTCOME_FREE_REACT_MODES
+            and not state.get("paper_preset")
             and "assess_zero_positive_evidence" not in completed_actions
         ):
             missing.append("assess_zero_positive_evidence")
@@ -4188,7 +4450,13 @@ def run_live_trace(state: dict[str, Any], client: Any, max_steps: int, temperatu
         if action_object.get("action") == "final_predict" and observation.get("accepted"):
             prediction = observation["prediction"]
             break
-        if action == "final_predict" and observation.get("error") == "final_predict_requires_non_negative_numeric_award_eur":
+        if state.get("paper_preset"):
+            next_instruction = (
+                "Continue with one JSON Action Object. final_predict requires all five fields: award_eur, "
+                "rationale_summary, zero_positive_decision, aggregation_scale_decision, uncertainty. "
+                "Do not omit diagnostics. Complete the required controller actions first."
+            )
+        elif action == "final_predict" and observation.get("error") == "final_predict_requires_non_negative_numeric_award_eur":
             next_instruction = (
                 "Your previous final_predict was invalid because action_input.award_eur was missing "
                 "or not a non-negative number. Return exactly one JSON Action Object. If you are ready "
@@ -4223,8 +4491,14 @@ def write_outputs(result: dict[str, Any], trace_out: str | None, prediction_out:
         prediction = result.get("prediction")
         if prediction is None:
             return
+        if not result.get("itemid") or "award_eur" not in prediction:
+            raise ValueError("Prediction export requires an itemid and explicit award_eur")
+        # Retain legacy top-level diagnostics while adding the evaluator's canonical record envelope.
+        exported = {**prediction, "itemid": result["itemid"],
+                    "predictions": [{"itemid": result["itemid"], "predicted_award_eur": prediction["award_eur"]}],
+                    "implementation_manifest": result.get("implementation_manifest", {})}
         Path(prediction_out).parent.mkdir(parents=True, exist_ok=True)
-        Path(prediction_out).write_text(json.dumps(prediction, ensure_ascii=False) + "\n", encoding="utf-8")
+        Path(prediction_out).write_text(json.dumps(exported, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def print_summary(result: dict[str, Any]) -> None:
@@ -4262,6 +4536,14 @@ def print_summary(result: dict[str, Any]) -> None:
 
 def main() -> None:
     args = parse_args()
+    for output in [args.trace_out, args.prediction_out, args.compact_packet_out]:
+        if output and Path(output).exists():
+            raise ValueError("output artifacts already exist; choose fresh paths before running")
+    _, train_csv, train_labels, provenance = PRIOR_CONTRACT.bind_selected_training_inputs(
+        args.dataset_release, args.train_csv, args.train_label_csv, dataset_version=args.dataset_version)
+    if not args.prior_dir:
+        raise ValueError("Supply --prior_dir for the selected version's verified empirical priors")
+    PRIOR_CONTRACT.verify_prior_bundle(args.prior_dir, train_csv, train_labels, dataset_version=provenance["dataset_version"])
     if args.live and args.dry_run:
         raise ValueError("Use either --live or --dry_run, not both.")
     if not args.live:
@@ -4274,11 +4556,16 @@ def main() -> None:
         react_mode=args.react_mode,
         inference_mode=args.inference_mode,
         top_k=args.top_k,
-        train_csv=Path(args.train_csv),
-        train_label_csv=Path(args.train_label_csv),
+        train_csv=train_csv,
+        train_label_csv=train_labels,
         target_context_policy=args.target_context_policy,
         reference_context_policy=args.reference_context_policy,
+        prior_dir=Path(args.prior_dir) if args.prior_dir else None,
+        dataset_version=provenance["dataset_version"],
     )
+    state["paper_preset"] = args.paper_preset
+    if not state.get("leakage_audit", {}).get("passed"):
+        raise ValueError("Target leakage audit failed; no model call or prediction is permitted")
     if args.execution_mode == "compact_final":
         if args.compact_packet_file:
             packet = json.loads(Path(args.compact_packet_file).read_text(encoding="utf-8"))
@@ -4322,6 +4609,23 @@ def main() -> None:
     else:
         result = deterministic_dry_run_trace(state)
 
+    result["implementation_manifest"] = {
+        "dataset_provenance": {**provenance, "target_source_sha256": PRIOR_CONTRACT.file_sha256(args.case_file),
+            "compact_packet_sha256": PRIOR_CONTRACT.file_sha256(args.compact_packet_file) if args.compact_packet_file else None},
+        "preset": PAPER_PRESET if args.paper_preset else "custom_or_legacy",
+        "historical_reproduction": False,
+        "top_k_total": args.top_k,
+        "max_steps": args.max_steps,
+        "react_mode": args.react_mode,
+        "inference_mode": args.inference_mode,
+        "model": args.model,
+        "api_base": args.api_base,
+        "temperature": args.temperature,
+        "run_time_utc": datetime.now(timezone.utc).isoformat(),
+        "historical_provider_snapshot": "not_recovered",
+        "prior_validation": state["prior_validation"],
+        "internal_target_redaction_report": state["internal_target_redaction_report"],
+    }
     write_outputs(result, args.trace_out, args.prediction_out)
     print_summary(result)
 

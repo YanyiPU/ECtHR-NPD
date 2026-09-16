@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import math
+import os
 import re
+import tempfile
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -50,14 +53,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--itemids", nargs="+", default=None, help="Only rebuild these itemids.")
     parser.add_argument("--max-cases", type=int, default=None, help="Limit processed cases.")
     parser.add_argument("--sync-case-store", action="store_true", help="Also refresh per-itemid raw case files while reading.")
+    parser.add_argument("--workspace-root", type=Path, default=DATASET_ROOT,
+                        help="Internal workspace containing unstructured/; historical structured/cases_core.json is optional.")
     return parser.parse_args()
 
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    atomic_text(path, "".join(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n" for row in rows))
+
+
+def atomic_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def merge_jsonl_by_itemid(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -68,11 +84,16 @@ def merge_jsonl_by_itemid(path: Path, rows: list[dict[str, Any]]) -> None:
                 if not line.strip():
                     continue
                 row = json.loads(line)
+                if row["itemid"] in existing:
+                    raise ValueError(f"Duplicate existing itemid {row['itemid']} in {path}")
                 existing[row["itemid"]] = row
+    incoming_seen: set[str] = set()
     for row in rows:
+        if row["itemid"] in incoming_seen:
+            raise ValueError(f"Duplicate incoming itemid {row['itemid']}")
+        incoming_seen.add(row["itemid"])
         existing[row["itemid"]] = row
-    ordered = [existing[itemid] for itemid in sorted(existing)]
-    write_jsonl(path, ordered)
+    write_jsonl(path, list(existing.values()))
 
 
 def extract_judgment_year(value: Any) -> str | None:
@@ -121,9 +142,42 @@ def normalize_article(article: Any) -> str | None:
     return normalized or None
 
 
+def metadata_list(value: Any, *, typed_findings: bool = False) -> list | None:
+    """Decode exported list metadata without turning unknown into a false zero."""
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or text.lower() in {"null", "none", "nan", "n/a"}:
+            return None
+        if text.startswith(("[", "{")):
+            try:
+                value = json.loads(text)
+            except ValueError:
+                try:
+                    value = ast.literal_eval(text)
+                except (ValueError, SyntaxError):
+                    return None
+        elif not typed_findings:
+            value = [part.strip() for part in text.split(";") if part.strip()]
+    if not isinstance(value, list):
+        return None
+    if typed_findings and any(not isinstance(entry, dict) or not entry.get("type") for entry in value):
+        return None
+    return value
+
+
+def metadata_boolean(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if str(value).strip().lower() in {"true", "1", "1.0", "yes"}:
+        return True
+    if str(value).strip().lower() in {"false", "0", "0.0", "no"}:
+        return False
+    return None
+
+
 def extract_mentioned_articles(row: dict[str, Any]) -> list[str]:
     seen: list[str] = []
-    for article in row.get("article") or []:
+    for article in metadata_list(row.get("article")) or []:
         normalized = normalize_article(article)
         if normalized and normalized not in seen:
             seen.append(normalized)
@@ -132,7 +186,7 @@ def extract_mentioned_articles(row: dict[str, Any]) -> list[str]:
 
 def extract_detailed_violations(row: dict[str, Any]) -> list[dict[str, Any]]:
     detailed: list[dict[str, Any]] = []
-    for entry in row.get("conclusion") or []:
+    for entry in metadata_list(row.get("conclusion"), typed_findings=True) or []:
         if not isinstance(entry, dict):
             continue
         if entry.get("type") != "violation":
@@ -157,10 +211,13 @@ def extract_violated_articles(row: dict[str, Any]) -> list[str]:
     return seen
 
 
-def has_mixed_outcome(row: dict[str, Any]) -> bool:
+def has_mixed_outcome(row: dict[str, Any]) -> bool | None:
+    conclusions = metadata_list(row.get("conclusion"), typed_findings=True)
+    if conclusions is None:
+        return None
     has_violation = False
     has_no_violation = False
-    for entry in row.get("conclusion") or []:
+    for entry in conclusions:
         if not isinstance(entry, dict):
             continue
         if entry.get("type") == "violation":
@@ -170,9 +227,11 @@ def has_mixed_outcome(row: dict[str, Any]) -> bool:
     return has_violation and has_no_violation
 
 
-def decision_body_category(row: dict[str, Any]) -> str:
+def decision_body_category(row: dict[str, Any]) -> str | None:
     branch = str(row.get("doctypebranch") or "").upper()
     body_name = str(row.get("originatingbody_name") or "").upper()
+    if not branch and not body_name:
+        return None
     if "GRAND CHAMBER" in branch or "GRAND CHAMBER" in body_name:
         return "Grand Chamber"
     if "SINGLE JUDGE" in branch or "SINGLE JUDGE" in body_name:
@@ -514,6 +573,13 @@ def build_profiled_sections(
 
 
 def build_token_counter():
+    def approximate_tokens(text: str) -> int:
+        return math.ceil(len(text) / 4)
+
+    # tiktoken.get_encoding may download a vocabulary on first use. Token
+    # counts here are diagnostics; an offline reconstruction must not do that.
+    if os.environ.get("EXTRACTION_TOKEN_COUNTER", "char_div_4") != "tiktoken":
+        return approximate_tokens, "char_div_4_fallback"
     try:
         import tiktoken  # type: ignore
 
@@ -524,10 +590,7 @@ def build_token_counter():
 
         return count_tokens, "tiktoken/cl100k_base"
     except Exception:
-        def count_tokens(text: str) -> int:
-            return math.ceil(len(text) / 4)
-
-        return count_tokens, "char_div_4_fallback"
+        return approximate_tokens, "char_div_4_fallback"
 
 
 def sample_excerpt(text: str, limit: int = 280) -> str:
@@ -616,7 +679,9 @@ def make_case_record(
             "scattered_reasoning_snippets": scattered_reasoning_snippets,
         },
         "facts_procedure": {
-            "num_applicants": core_row["num_applicants_proxy"],
+            "num_applicants": None,
+            "num_application_numbers": core_row["num_application_numbers"],
+            "num_applicants_status": "requires_person_level_extraction",
             "applicants": [],
             "status": {
                 "is_vulnerable": None,
@@ -756,10 +821,27 @@ def make_case_record(
 
 
 def make_core_row(row: dict[str, Any], existing: dict[str, Any] | None, section_key: str | None, sections: list[dict[str, Any]]) -> dict[str, Any]:
+    row = dict(row)
+    for key in ("article", "conclusion", "representedby", "scl", "parties"):
+        row[key] = metadata_list(row.get(key), typed_findings=key == "conclusion")
     violated = extract_violated_articles(row)
     mentioned = extract_mentioned_articles(row)
     detailed = extract_detailed_violations(row)
     app_numbers = extract_application_numbers(row.get("appno") or row.get("extractedappno"))
+    conclusions_known = row["conclusion"] is not None
+    distinct_violated_codes = list(dict.fromkeys(entry["article"] for entry in detailed if entry["article"]))
+    codes_known = conclusions_known and all(entry["article"] for entry in detailed)
+    missing_fields = [key for key in ("article", "conclusion", "representedby", "scl") if row.get(key) is None]
+    if not app_numbers:
+        missing_fields.append("application_numbers")
+    if conclusions_known and not codes_known:
+        missing_fields.append("violated_article_codes")
+    category = decision_body_category(row)
+    is_grand_chamber = category == "Grand Chamber" if category is not None else None
+    complex_metadata = (len(app_numbers) > 1 and len(distinct_violated_codes) > 1) if app_numbers and codes_known else None
+    # Three-valued OR: either known-true arm suffices; unknown is not false.
+    challenging_metadata = True if is_grand_chamber is True or complex_metadata is True else (
+        False if is_grand_chamber is False and complex_metadata is False else None)
     country_name = existing.get("country_name") if existing else None
     country_alpha2 = existing.get("country_alpha2") if existing else None
     judgment_year = (
@@ -779,28 +861,37 @@ def make_core_row(row: dict[str, Any], existing: dict[str, Any] | None, section_
         "judgment_year": judgment_year,
         "case_importance": row.get("importance"),
         "doctypebranch": row.get("doctypebranch"),
-        "decision_body_category": decision_body_category(row),
-        "is_grand_chamber": decision_body_category(row) == "Grand Chamber",
-        "has_separate_opinion": str(row.get("separateopinion") or "").upper() == "TRUE",
-        "respondent_country": country_name or row.get("respondent"),
-        "country_alpha2": country_alpha2,
+        "decision_body_category": category,
+        "is_grand_chamber": is_grand_chamber,
+        "has_separate_opinion": metadata_boolean(row.get("separateopinion")),
+        "respondent_country": country_name or row.get("respondent") or row.get("country"),
+        "country_alpha2": country_alpha2 or row.get("country_alpha2"),
         "originatingbody_name": row.get("originatingbody_name"),
-        "all_scl_citations": row.get("scl") or [],
-        "article": row.get("article") or [],
-        "conclusion": row.get("conclusion") or [],
-        "violated_articles": violated,
-        "detailed_violations": detailed,
-        "num_violations_found": len(detailed),
+        "all_scl_citations": row.get("scl"),
+        "article": row.get("article"),
+        "conclusion": row.get("conclusion"),
+        "violated_articles": violated if codes_known else None,
+        "detailed_violations": detailed if conclusions_known else None,
+        "num_violations_found": len(detailed) if conclusions_known else None,
+        "distinct_violated_article_codes": distinct_violated_codes if codes_known else None,
+        "num_distinct_violated_article_codes": len(distinct_violated_codes) if codes_known else None,
+        "multi_application_multi_violation_condition": complex_metadata,
+        "challenging_metadata_eligible": challenging_metadata,
         "has_mixed_outcome": has_mixed_outcome(row),
-        "represented": bool([x for x in (row.get("representedby") or []) if str(x).strip() and str(x).strip().upper() != "N/A"]),
+        "represented": bool([x for x in row["representedby"] if str(x).strip() and str(x).strip().upper() != "N/A"])
+        if row["representedby"] is not None else None,
         "voting_pattern": None,
         "article_41_precedents": [],
-        "mentioned_articles": mentioned,
-        "num_applicants_proxy": max(1, len(app_numbers)) if app_numbers else 1,
-        "application_numbers_extracted": app_numbers,
+        "mentioned_articles": mentioned if row["article"] is not None else None,
+        "num_applicants_proxy": len(app_numbers) if app_numbers else None,
+        "num_applicants_proxy_definition": "legacy_application_number_count_not_person_count",
+        "num_application_numbers": len(app_numbers) if app_numbers else None,
+        "application_numbers_extracted": app_numbers if app_numbers else None,
+        "metadata_missing_fields": missing_fields,
+        "metadata_normalization_issues": row.get("metadata_normalization_issues") or [],
         "content_source_key": section_key,
         "top_level_section_names": [section.get("section_name") for section in sections if section.get("section_name")],
-        "conclusion_count": len(row.get("conclusion") or []),
+        "conclusion_count": len(row["conclusion"]) if conclusions_known else None,
     }
 
 
@@ -846,24 +937,64 @@ def make_markdown(summary: dict[str, Any], sanity_checks: list[dict[str, Any]]) 
     return "\n".join(lines) + "\n"
 
 
+def configure_workspace(root: Path) -> None:
+    global DATASET_ROOT, EXTRACTION_ROOT, UNSTRUCTURED, CASES_CORE, OUTPUTS, REPORTS
+    DATASET_ROOT = root
+    EXTRACTION_ROOT = root / "extraction"
+    UNSTRUCTURED = root / "unstructured" / "cases.json"
+    CASES_CORE = root / "structured" / "cases_core.json"
+    OUTPUTS = EXTRACTION_ROOT / "outputs"
+    REPORTS = EXTRACTION_ROOT / "reports"
+    for name, filename in {"CASE_FEATURES_LABELS_JSONL": "case_features_labels.jsonl",
+                           "CORE_CASE_JSONL": "core_case.jsonl", "FACTS_PROCEDURE_INPUTS_JSONL": "facts_procedure_inputs.jsonl",
+                           "CLAIM_AWARD_INPUTS_JSONL": "claim_award_inputs.jsonl", "REASONING_INPUTS_JSONL": "reasoning_inputs.jsonl"}.items():
+        globals()[name] = OUTPUTS / filename
+    for name, filename in {"SUMMARY_JSON": "extraction_layer_summary.json", "SUMMARY_MD": "EXTRACTION_LAYER_SUMMARY.md",
+                           "SANITY_JSON": "extraction_sanity_checks.json", "SAMPLES_JSON": "extraction_samples.json"}.items():
+        globals()[name] = REPORTS / filename
+
+
+def load_optional_core(path: Path) -> dict[str, dict]:
+    if not path.exists():
+        return {}
+    rows = load_json(path)
+    if not isinstance(rows, list):
+        raise ValueError(f"{path}: expected a JSON array")
+    result = {}
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("itemid") or row["itemid"] in result:
+            raise ValueError(f"{path}: invalid or duplicate itemid")
+        result[row["itemid"]] = row
+    return result
+
+
 def main() -> None:
     args = parse_args()
+    if args.max_cases is not None and args.max_cases <= 0:
+        raise ValueError("--max-cases must be positive")
+    # Preserve the original default output layout unless an external workspace
+    # was requested (the distributed folder may be named extraction_pipeline).
+    if args.workspace_root != DATASET_ROOT:
+        configure_workspace(args.workspace_root)
     start = time.perf_counter()
     count_tokens, token_method = build_token_counter()
 
-    cases_core = {row["itemid"]: row for row in load_json(CASES_CORE)}
+    cases_core = load_optional_core(CASES_CORE)
     selected_itemids = [str(x) for x in args.itemids] if args.itemids else None
+    if selected_itemids and len(selected_itemids) != len(set(selected_itemids)):
+        raise ValueError("Duplicate --itemids are not allowed")
     if selected_itemids and args.max_cases is not None:
         selected_itemids = selected_itemids[: args.max_cases]
     if selected_itemids:
-        rows_by_itemid = load_cases_by_itemid(selected_itemids, fallback_cases_json=UNSTRUCTURED, backfill_store=True)
+        rows_by_itemid = load_cases_by_itemid(selected_itemids, case_store_dir=UNSTRUCTURED.parent / "cases_by_itemid",
+                                            fallback_cases_json=UNSTRUCTURED, backfill_store=args.sync_case_store)
         missing = [itemid for itemid in selected_itemids if itemid not in rows_by_itemid]
         if missing:
             raise RuntimeError(f"{len(missing)} itemids could not be loaded from case store or cases.json")
         cases_iterable = (rows_by_itemid[itemid] for itemid in selected_itemids)
     else:
         cases_iterable = iter_cases_from_cases_json(UNSTRUCTURED)
-    targeted_refresh = bool(selected_itemids)
+    targeted_refresh = bool(selected_itemids) or args.max_cases is not None
 
     core_rows: list[dict[str, Any]] = []
     facts_rows: list[dict[str, Any]] = []
@@ -893,13 +1024,19 @@ def main() -> None:
     tokens_c_total = 0
     tokens_d_total = 0
 
+    seen_itemids: set[str] = set()
     for row in cases_iterable:
         if not selected_itemids and args.max_cases is not None and total_cases >= args.max_cases:
             break
         total_cases += 1
         if args.sync_case_store:
-            write_case_to_store(row, force=False)
+            write_case_to_store(row, case_store_dir=UNSTRUCTURED.parent / "cases_by_itemid", force=False)
         itemid = row["itemid"]
+        if not isinstance(itemid, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", itemid):
+            raise ValueError("Missing or unsafe source itemid")
+        if itemid in seen_itemids:
+            raise ValueError(f"Duplicate source itemid {itemid}")
+        seen_itemids.add(itemid)
         existing = cases_core.get(itemid)
         section_key, sections = top_level_sections(row)
         if sections:
@@ -1075,6 +1212,8 @@ def main() -> None:
                 }
             )
 
+    if total_cases == 0:
+        raise RuntimeError("No cases were processed; output files were not changed")
     if targeted_refresh:
         merge_jsonl_by_itemid(CASE_FEATURES_LABELS_JSONL, case_records)
         merge_jsonl_by_itemid(CORE_CASE_JSONL, core_rows)
@@ -1093,12 +1232,7 @@ def main() -> None:
     per_case_dir.mkdir(parents=True, exist_ok=True)
     for rec in case_records:
         itemid = rec["itemid"]
-        (per_case_dir / f"{itemid}.json").write_text(
-            json.dumps(rec, ensure_ascii=False), encoding="utf-8"
-        )
-
-    if total_cases == 0:
-        raise RuntimeError("No cases were processed")
+        atomic_text(per_case_dir / f"{itemid}.json", json.dumps(rec, ensure_ascii=False))
     if targeted_refresh:
         refresh_summary = {
             "mode": "targeted_refresh",
@@ -1125,7 +1259,7 @@ def main() -> None:
                 "content_coverage": f"{content_coverage}/{total_cases}",
                 "paragraphs_coverage": f"{paragraphs_coverage}/{total_cases}",
             },
-            "note": "Current ECHR-NPD canonical input already contains nested content and paragraphs for all cases.",
+            "note": "Structural coverage only; this is not scientific label or release validation. DOCX reconstruction may omit a separate paragraphs array.",
         },
         {
             "name": "Top-Level Section Coverage",
@@ -1170,7 +1304,7 @@ def main() -> None:
         },
         {
             "name": "Core-Case Consistency Vs Existing cases_core",
-            "status": "PASS"
+            "status": "NOT_APPLICABLE" if not cases_core else "PASS"
             if violation_match == total_cases and conclusion_count_match == total_cases and decision_body_match == total_cases and mentioned_match == total_cases
             else "WARN",
             "metrics": {
@@ -1179,7 +1313,7 @@ def main() -> None:
                 "decision_body_exact_match": f"{decision_body_match}/{total_cases}",
                 "mentioned_articles_exact_match": f"{mentioned_match}/{total_cases}",
             },
-            "note": "Confirms that the new deterministic backbone agrees with the current canonical flat table on the main metadata and violation fields.",
+            "note": "Optional comparison with a historical core table, not a prerequisite or correctness oracle for new cases.",
         },
     ]
 

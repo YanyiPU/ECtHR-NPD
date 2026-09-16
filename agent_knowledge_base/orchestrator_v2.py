@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Bounded agentic orchestrator for the v3 NPD knowledge base.
+Restricted diagnostic single-prompt assembler for the v3 NPD knowledge base.
 
 This scaffold keeps the v2 module-selection machinery but changes the
 experimental contract:
@@ -12,12 +12,15 @@ experimental contract:
 - zero-shot versus few-shot prompt assembly
 - dry-run inspection
 
-It does not implement a provider-specific LLM call.
+It does not implement a provider-specific LLM call.  This legacy assembler
+uses the award_redacted_full_info input contract and is not the public strict
+ReAct path or a submitted-paper reproduction command.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import csv
 import json
 import os
@@ -1327,10 +1330,25 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--case_file", required=True)
     parser.add_argument("--mode", default=AWARD_REDACTED_MODE, choices=[AWARD_REDACTED_MODE])
+    parser.add_argument(
+        "--restricted_diagnostic",
+        action="store_true",
+        help=(
+            "Required acknowledgement: this legacy full-information assembler is a "
+            "restricted diagnostic, not a strict-input or submitted-paper reproduction."
+        ),
+    )
     parser.add_argument("--kb_dir", default=str(Path(__file__).resolve().parent))
     parser.add_argument("--dry_run", action="store_true")
     parser.add_argument("--prompt_out", default=None, help="Optional path to write rendered prompt text.")
     args = parser.parse_args()
+
+    if not args.restricted_diagnostic:
+        parser.error(
+            "orchestrator_v2.py is a restricted award_redacted_full_info diagnostic. "
+            "Use react_orchestrator.py (default strict_react) for the public path, or "
+            "pass --restricted_diagnostic for an explicitly labelled diagnostic only."
+        )
 
     kb_dir = Path(args.kb_dir)
     case_path = Path(args.case_file)
@@ -1346,7 +1364,12 @@ def main() -> None:
         case = case[0]
 
     payload = assemble_payload(kb_dir, case, args.mode)
+    payload["input_provenance"] = {"dataset_version": "unversioned_restricted_diagnostic_input",
+                                   "case_file_sha256": hashlib.sha256(case_path.read_bytes()).hexdigest(),
+                                   "historical_reproduction": False}
     if args.prompt_out:
+        if Path(args.prompt_out).exists():
+            raise ValueError("prompt_out already exists; use a fresh diagnostic artifact path")
         Path(args.prompt_out).write_text(payload["prompt_text"], encoding="utf-8")
     if args.dry_run:
         print_summary(payload)

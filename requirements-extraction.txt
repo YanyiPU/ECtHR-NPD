@@ -1,0 +1,2 @@
+# Strict extraction schema validation (never silently optional).
+jsonschema>=4.18,<5

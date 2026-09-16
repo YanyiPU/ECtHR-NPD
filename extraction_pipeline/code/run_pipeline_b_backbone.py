@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from case_store import CASE_STORE_DIR, UNSTRUCTURED_CASES, load_cases_by_itemid
+from openai_compatible_client import schema_errors
 
 EXTRACTION_ROOT = Path(__file__).resolve().parents[1]
 DATASET_ROOT = EXTRACTION_ROOT.parent
@@ -231,7 +232,7 @@ def _docname_names(docname: str) -> list[str]:
     return [_title_case_name(part) for part in parts]
 
 
-def _extract_num_applicants(row: dict[str, Any], source_row: dict[str, Any], appendix_text: str, procedure_text: str) -> tuple[int, list[str]]:
+def _extract_num_applicants(row: dict[str, Any], source_row: dict[str, Any], appendix_text: str, procedure_text: str) -> tuple[int | None, list[str]]:
     notes: list[str] = []
     match = EXPLICIT_APPLICANT_COUNT_RE.search(appendix_text) or EXPLICIT_APPLICANT_COUNT_RE.search(procedure_text)
     if match:
@@ -243,23 +244,17 @@ def _extract_num_applicants(row: dict[str, Any], source_row: dict[str, Any], app
         notes.append("num_applicants from parsed applicant rows")
         return len(applicant_pairs), notes
     source_n = source_row.get("n_applicants")
-    if isinstance(source_n, int) and source_n > 0:
+    if isinstance(source_n, int) and not isinstance(source_n, bool) and source_n > 0:
         notes.append("num_applicants from source metadata n_applicants")
         return source_n, notes
     source_n_text = source_row.get("n_applicants")
-    if isinstance(source_n_text, str) and source_n_text.isdigit():
+    if isinstance(source_n_text, str) and source_n_text.isdigit() and int(source_n_text) > 0:
         notes.append("num_applicants from source metadata n_applicants")
         return int(source_n_text), notes
-    docname_names = _docname_names(source_row.get("docname") or "")
-    if docname_names:
-        notes.append("num_applicants from docname applicant side")
-        return len(docname_names), notes
-    proxy = row["core_case"].get("num_applicants_proxy")
-    if isinstance(proxy, int) and proxy > 0:
-        notes.append("num_applicants from existing proxy")
-        return proxy, notes
-    notes.append("num_applicants defaulted to 1")
-    return 1, notes
+    # Application numbers and title fragments (e.g. "and Others") are not
+    # people. Absence of person-count evidence must remain unknown.
+    notes.append("num_applicants unknown: no explicit person-count evidence")
+    return None, notes
 
 
 def _extract_uniform_nationality(procedure_text: str) -> str | None:
@@ -367,7 +362,9 @@ def _build_applicants(
 
 
 def validate_result(result: dict[str, Any], schema: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
+    errors = schema_errors(result, schema)
+    if errors:
+        return errors
     if "itemid" not in result:
         errors.append("missing itemid")
     facts = result.get("facts_procedure")
@@ -424,13 +421,18 @@ def run_one_case(itemid: str, row: dict[str, Any], source_row: dict[str, Any], s
     judgment_year = _judgment_year(row.get("judgementdate") or "")
 
     num_applicants, count_notes = _extract_num_applicants(row, source_row, appendix_text, procedure_text)
+    if num_applicants is None:
+        return {"status": "insufficient_evidence", "itemid": itemid, "attempts": 0,
+                "elapsed_seconds": time.perf_counter() - start,
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                "errors": count_notes}
     applicants, applicant_notes = _build_applicants(row, source_row, num_applicants, appendix_text, procedure_text, judgment_year)
 
     if len(applicants) != num_applicants:
         num_applicants = len(applicants)
 
     represented = row["core_case"].get("represented")
-    if represented is None:
+    if represented is None and "representedby" in source_row:
         represented = bool(source_row.get("representedby"))
 
     indirect_victim_text = "\n".join([intro_text, procedure_text, facts_text])
@@ -481,7 +483,7 @@ def main() -> None:
     schema = load_json(SCHEMA_PATH)
     run_dir = make_run_dir(args.run_name)
 
-    split_to_ids = {split: load_split_ids(split) for split in args.splits}
+    split_to_ids = {} if args.itemids else {split: load_split_ids(split) for split in args.splits}
     if args.itemids:
         unique_ids = dedupe_preserve_order([str(x) for x in args.itemids])
         split_to_ids["manual_itemids"] = unique_ids
@@ -528,7 +530,8 @@ def main() -> None:
         return
 
     start = time.perf_counter()
-    success_rows: dict[str, dict[str, Any]] = {}
+    # Preserve earlier successful rows when rebuilding by_split on resume.
+    success_rows = load_jsonl_by_itemid(unique_results_path) if args.resume and unique_results_path.exists() else {}
     failure_rows: list[dict[str, Any]] = []
     usage_total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
@@ -577,6 +580,8 @@ def main() -> None:
     }
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if failure_rows:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

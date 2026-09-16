@@ -1,4 +1,5 @@
 {
+  "release_reproducibility_status": "blocked: the released generic encoder scaffold is example-only; the original architecture, checkpoint, historical text inputs, and predictions are not bundled",
   "architecture": "single regression head; no separate zero-positive classifier; no binary training objective",
   "baseline": "LegalLongformer 2x4K mean pure regression mid-LR from epoch1 best",
   "batch_size": 1,

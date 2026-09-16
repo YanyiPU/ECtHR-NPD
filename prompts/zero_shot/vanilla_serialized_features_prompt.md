@@ -17,13 +17,13 @@ Use only:
 - the serialized extracted features below
 - the provided violated articles below
 
-The features include case metadata, violation descriptors, applicant structure, reasoning descriptors, macro-economic context, and claim-side fields. Read the field names and values carefully.
+The features include case metadata, merits findings, non-identifying applicant summaries, and macro-economic context. Claims, Article 41 reasoning, operative provisions, allocation fields, and target-derived fields are excluded.
 
 The serialized features are the case facts available for this run. The absence of raw judgment narrative or raw Article 41 text is not a reason to predict 0 EUR. Make a best calibrated estimate from the structured fields.
 
-Adjust the amount using the extracted case-specific features: violation type, severity, duration, number and structure of applicants, applicant vulnerability, respondent context, reasoning descriptors, and claim-side fields.
+Adjust the amount using the visible case-specific features: violation type, duration, applicant structure, respondent context, and merits descriptors.
 
-The award can be 0 EUR or a positive integer EUR amount. As a rough benchmark/training-distribution prior, about one third of cases have a 0 EUR non-pecuniary damages award and the remaining cases have positive integer awards. Use this only as calibration; base the prediction on the serialized case-specific features.
+The award can be 0 EUR or a positive integer EUR amount. Base the prediction only on the visible features. Do not use dataset prevalence, quotas, external retrieval, named-case recall, or hidden award cues. Do not infer claim defects from absent Article 41 material. Predict one case-level total without summing amounts across Articles or multiplying by applicant count.
 
 `award_eur` must be an integer amount in original EUR scale. It is not log space, log1p, thousands, a normalized score, or a probability.
 

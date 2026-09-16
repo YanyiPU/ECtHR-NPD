@@ -1,0 +1,16 @@
+# Exact versions recorded in model_settings/tree/
+# strict_trainonly_50_feature_tree_regression/training_config.json.
+#
+# This is a constraint file for a tree-baseline replication environment, not
+# a claim that every historical text/encoder/agent dependency is released.
+# The recorded run used Python 3.11.15 on Windows; resolve native packages on
+# the target platform, then record the actual runtime versions emitted by the
+# runner's metadata.json.
+numpy==2.4.4
+pandas==3.0.2
+catboost==1.2.10
+xgboost==3.2.0
+lightgbm==4.6.0
+scikit-learn==1.8.0
+joblib==1.5.3
+bm25s==0.3.8

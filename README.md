@@ -1,136 +1,112 @@
-# ECtHR-NPD
+---
+language:
+- en
+pretty_name: ECtHR-NPD
+configs:
+- config_name: case_level
+  data_files:
+  - split: all
+    path: data/case_level.csv
+- config_name: applicant_level
+  data_files:
+  - split: all
+    path: data/applicant_level.csv
+---
 
-## Current update status
+# ECtHR-NPD — unified current release
 
-The [v1.1 release notes](docs/releases/v1.1.md) explain the five case-level
-eligibility changes individually using project-assigned IDs. The prepared
-corrected dataset has 14,570 cases, 44,557 applicant source records, and a
-698-case Challenging view. Three mixed-head cases are excluded and two
-incomplete/conflicting targets are quarantined; the source-supported two-table
-preparation is separate from the historical files already public here.
+One current dataset, not separate v1.0/v1.1 releases. This author-approved
+distribution is available for manual review. It preserves the paper's
+14,575-case cohort and original partitions, with documented amount corrections.
+It is not a byte-identical copy of the targets used for the original experiments.
 
-**This commit updates documentation, not dataset payloads.** The existing
-`dataset_release/` is the historical public case-level release, not
-the new two-table v1.1 dataset. Public upload of the new applicant table is
-held pending explicit confirmation of the previously paused publication of
-precise demographic and award fields. Login does not certify privacy clearance.
-See [release status](RELEASE_STATUS.md). No private mappings or personal records
-are included in this documentation update.
+## Data
 
-## Historical release documentation (not the new v1.1 two-table package)
+- `data/case_level.csv`: 14,575 cases; 33 columns.
+- `data/applicant_level.csv`: 44,581 applicant source units; 14 columns.
+- Join on `case_id`, the original HUDOC item identifier. `applicant_id` remains a
+  stable source-record key, not an independently identified natural person.
+- Train / validation / test: 10,217 / 1,461 / 2,897. ID / OOD: 1,000 / 1,897.
+  Challenging: 699, overlapping the test pool, not a fourth physical split.
+- Names are `[MASKED]`. Dates, exact amounts, birth years, nationality text and
+  other structured attributes remain. This is **name-masked, not anonymous**.
+- No ratio, one-hot, log-transformed or numerically encoded predictor columns.
+  Amounts, years, counts and durations are natural numeric values. `y_binary` is
+  the existing outcome label, not a predictor encoding.
+- `unknown` is missing or unresolved, never an invented zero. Estate awards are
+  identified by `npd_award_scope`; no amount is divided among heirs or groups.
 
-Code and documentation for *How Much is a Human Right Worth? ECtHR-NPD: A Benchmark for Predicting Non-Pecuniary Damage Awards*.
+`split` supplies logical partitions in each CSV. Hugging Face config `all` means
+the full physical table, not the training split. See `CSV_TREE.md` for every
+column and `DATA_DICTIONARY.md` for meanings.
 
-**Data:** [Hugging Face dataset](https://huggingface.co/datasets/YanyiPU716/ECtHR-NPD)  
-**Paper:** final proceedings citation and link forthcoming
+## Important target limitation
 
-## Overview
+Five previously discussed cases remain in the cohort. Three have inseparable
+mixed-head awards and two have unresolved targets. Their historical benchmark
+labels are explicitly marked by `target_status`; they are **not newly verified
+pure-NPD totals**. The paper's universal target-validation/exclusion statements
+therefore cannot be claimed for every retained row. See `CHANGELOG.md`.
 
-ECtHR-NPD is a benchmark for predicting the case-level Article 41
-non-pecuniary damage (NPD) award in European Court of Human Rights
-(ECtHR) cases. The public release contains 14,575 validated case-level
-Euro targets, including valid zero awards, with chronological training,
-validation, and test splits.
+## Reproduction entry points
 
-| Split | Cases |
-| --- | ---: |
-| Train | 10,217 |
-| Validation | 1,461 |
-| Test | 2,897 |
-
-The test split also includes ID, OOD, and Challenging diagnostic-view
-annotations. ECtHR-NPD is intended for research on legal NLP and
-empirical legal analysis; it is not designed for legal advice, settlement
-valuation, or automated judicial decision-making.
-
-## Data release
-
-The canonical data are hosted on
-[Hugging Face](https://huggingface.co/datasets/YanyiPU716/ECtHR-NPD).
-The dataset release includes:
-
-- a complete extracted case-level dataset (`ecthr_npd_cases.csv`);
-- chronological `train.csv`, `validation.csv`, and `test.csv` files;
-- respondent-state/year economic covariates (`economic_covariates.csv`);
-- split and diagnostic-view annotations in the case-level files; and
-- a dataset card and source-terms note.
-
-It does **not** redistribute raw HUDOC judgment text, Article 41 or
-Article 50 award material, claim amounts, operative clauses, applicant
-names, model outputs, provider traces, or agent priors. Public HUDOC
-identifiers and URLs allow users to retrieve source judgments subject to
-the Court's terms.
-
-## Repository contents
-
-- `dataset_release/` — release bundle, including data copies used by the
-  packaged code and model-family-specific reproducibility inputs.
-- `code/` — data loading, evaluation helpers, and baseline implementations.
-- `prompts/` — prompt templates used for prompted conditions.
-- `model_settings/` — configuration files for the reported model families.
-- `source_reconstruction/` — helpers for retrieving and indexing public
-  source material in a user-supplied local workspace.
-- `extraction_pipeline/` — extraction code, prompts, and schemas.
-- `agent_knowledge_base/` — redacted resources and controller code for the
-  agent condition.
-- `scripts/smoke_test_release.py` — a lightweight consistency check for the
-  public release.
-
-## Prediction-input policy
-
-All model conditions should follow the
-[shared prediction-input policy](INPUT_CONTRACT.md). Permitted inputs are
-case metadata, violated-article information, case facts that exclude
-award-related material, and respondent-state/year external economic
-covariates. Award-related text, operative clauses, claim amounts, target
-labels, target-derived fields, and split/view labels must not be used as
-model inputs.
-
-## Installation and quick check
+Run from this folder using Python 3.10+; set `PYTHONDONTWRITEBYTECODE=1` if desired.
 
 ```bash
-git clone https://github.com/YanyiPU/ECtHR-NPD.git
-cd ECtHR-NPD
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python scripts/smoke_test_release.py
+python -B code/public_tables.py .
+python -B -m unittest discover -s tests
 ```
 
-The packaged structured-data baseline can be run with:
+Tests require the dependencies appropriate to their tested components. Install
+`requirements-extraction.txt` for extraction, and consult the experiment guide
+for optional modelling environments rather than assuming all GPU packages are
+needed to read the CSVs. The table validator itself uses the standard library.
 
-```bash
-python code/baselines/tree_models/train.py --model catboost --dataset-release dataset_release
-```
+- [Extraction and source reconstruction](docs/EXTRACTION.md): use the released
+  HUDOC IDs to obtain sources; create extraction candidates; run explicit review
+  checks before exporting two readable tables.
+- [Experiments](docs/EXPERIMENTS.md): prepare model-only encodings locally,
+  fit/select on train/validation, evaluate on fixed test views, and keep target
+  evidence out of predictors. The public CSVs themselves remain unencoded.
+- [Paper alignment and limits](docs/PAPER_ALIGNMENT.md): separates implemented
+  methods, tested behaviours, missing historical evidence and unrun experiments.
+- [Validation record](docs/VALIDATION.md): tests and actual checks for this ZIP.
 
-## Reproducibility scope
+Original checkpoints, predictions, provider responses, exact historical feature
+maps and complete manual-review ledgers have not all been recovered. This code
+supports transparent new runs; it does **not** authenticate the paper's reported
+scores. New readable-feature projections must not be called the original X1.
+Five known target ambiguities also remain, even though the cohort size matches.
 
-The release supports inspection of the dataset and code, and rerunning the
-packaged structured-data baselines. It does not claim one-command
-reproduction of every reported experiment: retrieval and text-encoder
-settings require user-supplied award-free text inputs; source
-reconstruction requires public source documents; and live agent or
-extraction runs require user-provided models or credentials. Raw judgment
-text, model checkpoints, predictions, and provider traces are intentionally
-not redistributed.
+Only two CSVs are distributed. Raw judgments, name mappings, review evidence and
+API logs are not bundled; local source reconstruction may create identifying
+files and send material to a configured provider only on explicit invocation.
+The extraction/experiment workflow does not upload its generated artifacts. Legacy internal-contract
+helpers retained for regression testing do not define extra public releases.
 
-## Source terms and responsible use
+## Maintenance and reuse
 
-The release redistributes derived tabular data and supporting code, not
-ECtHR judgment text. Use of official judgments retrieved through HUDOC
-remains subject to the Court's applicable terms. See
-[LICENSE_AND_SOURCE_TERMS.md](dataset_release/LICENSE_AND_SOURCE_TERMS.md)
-and the Hugging Face dataset card for details.
+Quarterly updates are intended to add newly eligible cases after review, with a
+dated change log and content hashes. This is not a claim of an unattended service
+or that the March 2026 source snapshot has already been extended. Cite the paper
+and the exact content revision, since corrections can change results even when
+the number of cases is unchanged. Please report suspected extraction errors.
 
-## Citation
+See `LICENSE_AND_SOURCE_TERMS.md`: this distribution does not select or grant a new
+open licence, nor assert compliance approval. No personal-name mapping is needed
+or included to join the two tables.
 
-If you use ECtHR-NPD, please cite the EMNLP 2026 Main Conference paper:
+## Where to review this release
 
-```bibtex
-@inproceedings{pu-etal-2026-ecthr-npd,
-  title = {How Much is a Human Right Worth? {ECtHR-NPD}: A Benchmark for Predicting Non-Pecuniary Damage Awards},
-  author = {Pu, Yanyi and Gonzalez-Salzberg, Damian and Yuan, Zheng and Aletras, Nikolaos},
-  booktitle = {Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing},
-  year = {2026}
-}
-```
+- GitHub: https://github.com/YanyiPU/ECtHR-NPD
+- Hugging Face: https://huggingface.co/datasets/YanyiPU716/ECtHR-NPD
+
+The current Hugging Face branch contains both tables and the complete matching
+research source package. GitHub synchronization is pending: its bulk-write
+request was blocked by the tool's payload-review size limit, so its current
+branch still contains the older release. For this manual review, use the data
+and code together from this Hugging Face repository.
+Older encoded tables and separate version-policy files are superseded in the
+current tree, not erased from repository history. The older private HF review
+repository is not this current public release. Publication does not resolve
+the five known target ambiguities or missing historical reproduction evidence.

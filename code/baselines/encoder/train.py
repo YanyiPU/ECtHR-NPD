@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Train strict pure-regression encoder baselines for ECtHR-NPD.
+"""Example-only strict encoder training scaffold for ECtHR-NPD.
 
-This script is intentionally text-source agnostic. Use `--text-inputs`
-for strict Article-41-free case texts. If omitted, the loader serializes
-the public strict inputs so the code remains runnable from the release
-without redistributing raw judgments.
+The released generic Trainer scaffold does not implement the paper's original
+chunking/late-fusion architectures or ship their checkpoints and historical
+text inputs. It can be run only with an explicit example-only acknowledgement;
+it must not be presented as reproduction of a reported encoder result. The
+separate train_paper.py now implements the specified core for explicit NEW runs.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ try:
     import torch
     from torch.utils.data import Dataset
     from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trainer, TrainingArguments
-except ImportError as exc:  # pragma: no cover - optional encoder dependency
+except Exception as exc:  # pragma: no cover - optional native dependency can fail to load
     torch = None  # type: ignore[assignment]
     Dataset = object  # type: ignore[assignment,misc]
     AutoModelForSequenceClassification = None  # type: ignore[assignment]
@@ -38,9 +39,18 @@ if str(BASELINES_ROOT) not in sys.path:
     sys.path.insert(0, str(BASELINES_ROOT))
 
 from encoder.data_loader import load_encoder_splits
+from data.data_loader import dataset_provenance, require_corrected_version
+from evaluate import evaluate_arrays
 
 
 ENCODER_SETTINGS = {
+    "release_status": "example_only_not_a_reported_encoder_reproduction",
+    "reproduction_blockers": [
+        "original historical implementation/provenance is not recovered; train_paper.py is a new implementation",
+        "reported checkpoints are not included",
+        "historical strict FACTS/text inputs are not included",
+        "reported prediction artifacts are not included",
+    ],
     "task": "pure_regression",
     "target": "y_amount_eur",
     "target_transform": "log1p(y_amount_eur), inverse expm1 to EUR, clipped at 0",
@@ -52,7 +62,7 @@ ENCODER_SETTINGS = {
         "direct award snippets",
         "target-derived fields",
     ],
-    "supported_settings": [
+    "historical_setting_records_not_implemented_by_this_scaffold": [
         "modernbert_base_8k_pure_regression",
         "legallongformer_2x4k_pure_regression",
         "modernbert_latefusion_x0_locked50",
@@ -90,48 +100,8 @@ def set_seed(seed: int) -> None:
         torch.manual_seed(seed)
 
 
-def rankdata_average(values: np.ndarray) -> np.ndarray:
-    order = np.argsort(values, kind="mergesort")
-    ranks = np.empty(values.size, dtype=float)
-    i = 0
-    while i < values.size:
-        j = i + 1
-        while j < values.size and values[order[j]] == values[order[i]]:
-            j += 1
-        ranks[order[i:j]] = (i + j - 1) / 2.0 + 1.0
-        i = j
-    return ranks
-
-
-def pearson_r(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    if y_true.size < 2 or np.allclose(y_true, y_true[0]) or np.allclose(y_pred, y_pred[0]):
-        return 0.0
-    return float(np.corrcoef(y_true, y_pred)[0, 1])
-
-
 def evaluate(y_true: np.ndarray, y_pred: np.ndarray, threshold: float = 0.5) -> dict[str, Any]:
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
-    true_pos = y_true > threshold
-    pred_pos = y_pred > threshold
-    tp = int((true_pos & pred_pos).sum())
-    fp = int((~true_pos & pred_pos).sum())
-    fn = int((true_pos & ~pred_pos).sum())
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
-    return {
-        "mae_all": float(np.abs(y_pred - y_true).mean()) if y_true.size else 0.0,
-        "rmse_all_appendix_only": float(np.sqrt(np.mean((y_pred - y_true) ** 2))) if y_true.size else 0.0,
-        "mae_positive_only": float(np.abs(y_pred[true_pos] - y_true[true_pos]).mean()) if true_pos.any() else 0.0,
-        "zero_positive_accuracy": float((true_pos == pred_pos).mean()) if y_true.size else 0.0,
-        "positive_precision": float(precision),
-        "positive_recall": float(recall),
-        "positive_f1": float(2 * precision * recall / (precision + recall)) if precision + recall else 0.0,
-        "pearson_r": pearson_r(y_true, y_pred),
-        "spearman_rho": pearson_r(rankdata_average(y_true), rankdata_average(y_pred)),
-        "num_samples": int(y_true.size),
-        "num_positive": int(true_pos.sum()),
-    }
+    return dict(evaluate_arrays(y_true, y_pred, threshold=threshold))
 
 
 def predict_eur(trainer: Any, dataset: Any) -> np.ndarray:
@@ -143,6 +113,7 @@ def predict_eur(trainer: Any, dataset: Any) -> np.ndarray:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train strict encoder pure-regression baseline")
     parser.add_argument("--dataset-release", default=None)
+    parser.add_argument("--dataset-version", choices=["corrected", "paper_reference"], default="corrected")
     parser.add_argument("--text-inputs", default=None, help="Optional strict Article-41-free CSV/JSONL keyed by itemid")
     parser.add_argument("--text-field", default="combined_input_text_with_violated_articles")
     parser.add_argument("--model-name-or-path", default="answerdotai/ModernBERT-base")
@@ -152,13 +123,30 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=2e-5)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--example-only",
+        action="store_true",
+        help="Acknowledge that this generic scaffold is not the reported encoder implementation or checkpoint.",
+    )
     args = parser.parse_args()
 
+    if not args.example_only:
+        parser.error(
+            "The released generic encoder scaffold cannot reproduce a reported encoder result. "
+            "Pass --example-only only for a new illustrative run."
+        )
+
+    require_corrected_version(args.dataset_version)
+    provenance = dataset_provenance(args.dataset_release, dataset_version=args.dataset_version,
+                                    input_files={"text_inputs": args.text_inputs})
+    output_dir = Path(args.output_dir)
+    if output_dir.exists() and any(output_dir.iterdir()):
+        parser.error("output directory must be empty; do not overwrite an experiment")
     if TRANSFORMERS_IMPORT_ERROR is not None:
         raise RuntimeError("transformers and torch are required for encoder training") from TRANSFORMERS_IMPORT_ERROR
 
     set_seed(args.seed)
-    splits = load_encoder_splits(args.dataset_release, text_inputs=args.text_inputs, text_field=args.text_field)
+    splits = load_encoder_splits(args.dataset_release, text_inputs=args.text_inputs, text_field=args.text_field, dataset_version=args.dataset_version)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
@@ -194,7 +182,9 @@ def main() -> None:
         metrics[name] = evaluate(y_true, y_pred)
 
     metadata = {
+        "dataset_provenance": provenance,
         "encoder_settings": ENCODER_SETTINGS,
+        "run_status": "example_only_not_a_reported_encoder_reproduction",
         "model_name_or_path": args.model_name_or_path,
         "max_length": args.max_length,
         "text_inputs": "user_supplied_strict_text" if args.text_inputs else "serialized_public_strict_inputs",

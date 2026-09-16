@@ -1,4 +1,9 @@
-# Mode Contract
+# Restricted Diagnostic Mode Contract
+
+> This contract describes only the legacy `award_redacted_full_info`
+> diagnostic. It is not the public `strict_react` contract. Direct execution
+> requires an explicit restricted-diagnostic acknowledgement and must not be
+> labelled as a strict-input or submitted-paper reproduction.
 
 ## Target Input Mode: `award_redacted_full_info`
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "LegalRegression ReAct Trace",
+  "title": "XXXX-12 ReAct Trace",
   "type": "object",
   "required": [
     "itemid",
@@ -19,7 +19,8 @@
         "strict_react",
         "award_redacted_react",
         "full_info_award_blind_react",
-        "agentic_claim_blind_court_outcome_free_train_only"
+        "agentic_claim_blind_court_outcome_free_train_only",
+        "agentic_claim_aware_court_outcome_free_train_only"
       ]
     },
     "inference_mode": {

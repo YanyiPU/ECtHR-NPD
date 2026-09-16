@@ -1,6 +1,8 @@
 {
   "kb_name": "npd_prediction_knowledge_base_v3_agentic_award_redacted",
   "version": "0.4.0",
+  "public_default_mode": "strict_react",
+  "legacy_index_scope": "restricted award_redacted_full_info diagnostic modules used for compatibility; not the public strict_react contract",
   "modes": [
     "award_redacted_full_info"
   ],

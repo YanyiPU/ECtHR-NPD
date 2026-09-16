@@ -4,10 +4,16 @@
 # the Python standard library; packages below are for data loading,
 # evaluation, baselines, retrieval, encoder training, and optional
 # extraction token counting.
+# `scripts/smoke_test_release.py` is dependency-free and can be run before
+# installing this file's optional runtime stack.
 
 # Core dataset loading and evaluation
 numpy>=1.24
 pandas>=2.0
+scikit-learn>=1.4
+
+# Source extraction schema validation is mandatory (no silent fallback).
+jsonschema>=4.22,<5
 
 # Structured tree baselines
 catboost>=1.2
@@ -19,6 +25,9 @@ FlagEmbedding>=1.2.10
 torch>=2.1
 transformers>=4.40
 sentence-transformers>=2.6
+
+# BM25 retrieval baseline: the runner rejects a different backend version.
+bm25s==0.3.8
 
 # Encoder fine-tuning baseline
 accelerate>=0.29

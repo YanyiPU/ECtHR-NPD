@@ -1,0 +1,10 @@
+# Observed local offline-test environment, Python 3.14.6.
+# These are NOT claimed to be the historical paper environment.
+# Full model training, tokenizers and provider clients need their separate
+# requirements/configurations. Platform wheel availability can differ.
+numpy==2.5.3
+pandas==3.0.5
+scipy==1.18.1
+scikit-learn==1.9.1
+jsonschema==4.26.0
+torch==2.14.0
