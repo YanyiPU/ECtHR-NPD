@@ -96,15 +96,33 @@ See `LICENSE_AND_SOURCE_TERMS.md`: this distribution does not select or grant a 
 open licence, nor assert compliance approval. No personal-name mapping is needed
 or included to join the two tables.
 
+## Citation
+
+Please cite the paper using the following BibTeX entry ([download](CITATION.bib))
+and identify the dataset commit used in your research.
+
+```bibtex
+@inproceedings{pu-etal-2026-ecthr-npd,
+  author    = {Pu, Yanyi and Gonzalez-Salzberg, Damian A. and Yuan, Zheng and Aletras, Nikolaos},
+  title     = {How Much is a Human Right Worth? {ECtHR-NPD}: A Benchmark for Predicting Non-Pecuniary Damage Awards},
+  booktitle = {Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing ({EMNLP})},
+  year      = {2026},
+  month     = oct,
+  address   = {Budapest, Hungary},
+  note      = {24--29 October 2026}
+}
+```
+
 ## Where to review this release
 
 - GitHub: https://github.com/YanyiPU/ECtHR-NPD
 - Hugging Face: https://huggingface.co/datasets/YanyiPU716/ECtHR-NPD
 
 Both current branches carry the same two tables and matching research source
-package. All 172 file inventories and content hashes were verified across
-GitHub and Hugging Face after synchronization. Use the data and code together
-from either repository for manual review.
+package. The original 172-file inventories and content hashes were verified
+across GitHub and Hugging Face after synchronization. The subsequent GitHub-only
+citation update leaves the data and executable code unchanged. Use the data and
+code together from either repository for manual review.
 Older encoded tables and separate version-policy files are superseded in the
 current tree, not erased from repository history. The older private HF review
 repository is not this current public release. Publication does not resolve

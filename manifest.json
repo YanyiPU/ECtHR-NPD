@@ -24,11 +24,12 @@
     ".gitattributes": "9e75dd981de037ec3769f24f790e126bc5a160b6871f510214e68dc70649aeeb",
     ".gitignore": "2c215c258c69f22bb4744306ce69469250442def53ab190d461fcd4ff401e9c4",
     "CHANGELOG.md": "cda9524b2b566e21f7d2eaa24b3ca786bf0215df4d5e4981b9e9c8dc8bc6c574",
+    "CITATION.bib": "7dd8e3a16fc9be9d2f353703bd11d759ffddc895d02874138d6360f70b6a8162",
     "CSV_TREE.md": "ef89632607f7f6501b4e79c24a291859df8d644b8a7205f11cc2d57f262cc61b",
     "DATA_DICTIONARY.md": "01345a23d5acb54f8ac09ebf6063640d8f2d17883e721430a0e204b2fcf894a8",
-    "FILE_TREE.md": "798598faec107992878d8633301ee5cf9a668c953df6adb42c8af398abbca9a7",
+    "FILE_TREE.md": "85d28a6cd78a0e59d615e47f642425ecccf940612f7f7e0e32800e260f2d8bc6",
     "LICENSE_AND_SOURCE_TERMS.md": "9054213886f635846fbf3b6348aba63216e30e3a089bfdd805946055a3da5ef7",
-    "README.md": "2af3eecf7244590457af465b4cc7933c94d3a542eb489e9e04dfc0bf53df24db",
+    "README.md": "5afa8d381f82aa4c02d7686ebfbf1fbf37ca48d31dd8993370a24d1435967c08",
     "agent_knowledge_base/PACKAGE_NOTES.md": "3e9f8cc2a7caedf6771a4b54e85a3c934982ce461101fd2b6f3eaf4fc48f6cb6",
     "agent_knowledge_base/README.md": "a0c915fc330d1cbaf4999f7eacf6a527120dc037ccde7d50ac9ed1a517b11128",
     "agent_knowledge_base/RELEASE_NOTES.md": "c57120711a67f2ac7180bec431e41e72b076e9e85e0a5f0969f811cfa60eb00a",
@@ -193,7 +194,7 @@
     "tests/test_unified_extraction.py": "42312c813678f4d66db3e509fffacdbd56e744e8a59f068936af22f3edb07bae",
     "tests/test_version_package.py": "2080e853a45aef1a0032decc0c58bdf2fb06d77fecab20601c9c8a41399e870c"
   },
-  "content_revision_sha256": "9e82a085c202dfd518d849454575cb3f3b312c0e8cf7185c7c22fcd36f83a64e",
+  "content_revision_sha256": "1edfbbbf25f1a02853039152a781252e38f8d49ef151a25050dff40d6e2dddba",
   "publication_status": "author_authorized_manual_review",
   "paper_alignment_certified": false,
   "repositories": {

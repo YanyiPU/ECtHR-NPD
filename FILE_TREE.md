@@ -5,6 +5,7 @@ ECtHR-NPD/
   .gitattributes
   .gitignore
   CHANGELOG.md
+  CITATION.bib
   CSV_TREE.md
   DATA_DICTIONARY.md
   FILE_TREE.md
