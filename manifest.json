@@ -29,7 +29,7 @@
     "DATA_DICTIONARY.md": "01345a23d5acb54f8ac09ebf6063640d8f2d17883e721430a0e204b2fcf894a8",
     "FILE_TREE.md": "85d28a6cd78a0e59d615e47f642425ecccf940612f7f7e0e32800e260f2d8bc6",
     "LICENSE_AND_SOURCE_TERMS.md": "9054213886f635846fbf3b6348aba63216e30e3a089bfdd805946055a3da5ef7",
-    "README.md": "5afa8d381f82aa4c02d7686ebfbf1fbf37ca48d31dd8993370a24d1435967c08",
+    "README.md": "b26433fcfc7442592225a11651995490f1bf1b3e6c62a4ed819937ac040fc4fa",
     "agent_knowledge_base/PACKAGE_NOTES.md": "3e9f8cc2a7caedf6771a4b54e85a3c934982ce461101fd2b6f3eaf4fc48f6cb6",
     "agent_knowledge_base/README.md": "a0c915fc330d1cbaf4999f7eacf6a527120dc037ccde7d50ac9ed1a517b11128",
     "agent_knowledge_base/RELEASE_NOTES.md": "c57120711a67f2ac7180bec431e41e72b076e9e85e0a5f0969f811cfa60eb00a",
@@ -194,7 +194,7 @@
     "tests/test_unified_extraction.py": "42312c813678f4d66db3e509fffacdbd56e744e8a59f068936af22f3edb07bae",
     "tests/test_version_package.py": "2080e853a45aef1a0032decc0c58bdf2fb06d77fecab20601c9c8a41399e870c"
   },
-  "content_revision_sha256": "1edfbbbf25f1a02853039152a781252e38f8d49ef151a25050dff40d6e2dddba",
+  "content_revision_sha256": "fec7869ecf160dc0844a1c03f25f566de5804773e78a3dad4c0a8caeec1a2fe7",
   "publication_status": "author_authorized_manual_review",
   "paper_alignment_certified": false,
   "repositories": {
