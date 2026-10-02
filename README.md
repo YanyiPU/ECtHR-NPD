@@ -29,7 +29,7 @@ Join the tables on `case_id`, the original HUDOC identifier. Applicant rows are 
 
 The test set comprises **1,000 ID** and **1,897 OOD** cases. The **699-case Challenging view** overlaps this test set; it is not an additional split. Each CSV contains its split assignments, so separate split files are unnecessary.
 
-Names are masked, but HUDOC identifiers and other potentially identifying attributes remain: **the dataset is not anonymous**. Five retained award labels have known unresolved or mixed-head issues, identified by `target_status`. See the [data documentation](DATA_DICTIONARY.md) and [known issues](CHANGELOG.md) before use.
+Names are masked, but HUDOC identifiers and other potentially identifying attributes remain: **the dataset is not anonymous**. See the [data documentation](DATA_DICTIONARY.md) for field definitions.
 
 ## Quick start
 
@@ -63,7 +63,7 @@ The paper compares constant predictors, gradient-boosted trees, retrieval baseli
 
 Award-related evidence must be kept out of prediction inputs. Fit preprocessing and retrieval priors on training data, select settings on validation data, and evaluate on the fixed test views.
 
-The current release includes documented label corrections. Historical feature maps, model checkpoints and provider-run artifacts are incomplete, so current runs must not be presented as exact reproductions of the paper's reported scores. Details are in [reproducibility notes](docs/PAPER_ALIGNMENT.md).
+Historical feature maps, model checkpoints and provider-run artifacts are incomplete, so current runs must not be presented as exact reproductions of the paper's reported scores. Details are in [reproducibility notes](docs/PAPER_ALIGNMENT.md).
 
 ## Updates and contributions
 
