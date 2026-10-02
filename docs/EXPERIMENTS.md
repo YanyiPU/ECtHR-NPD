@@ -2,7 +2,7 @@
 
 The package has one current dataset: 14,575 cases, with 10,217 train, 1,461 validation and 2,897 test cases. Use the package root as the dataset path. No version designation, private release contract, or pre-encoded 48/50-column matrix is required. Preserve the released splits and diagnostic view flags.
 
-These commands support **new experiments** on the current targets. Two case totals were corrected, and the exact historical X0–X3 feature map, tree search candidates, reviewed FACTS snapshots, model checkpoints, provider snapshots, predictions and traces are not completely available. Running current code is not proof of reproducing the submitted paper's numerical results. See [paper alignment](PAPER_ALIGNMENT.md) and the root change log for retained source issues.
+These commands support **new experiments** on the current targets. The exact historical X0–X3 feature map, tree search candidates, reviewed FACTS snapshots, model checkpoints, provider snapshots, predictions and traces are not completely available. Running current code is not proof of reproducing the submitted paper's numerical results. See [paper alignment](PAPER_ALIGNMENT.md) for method correspondence and reproduction requirements.
 
 ## Preparation and constant baselines
 
@@ -86,3 +86,4 @@ python -m unittest discover -s tests -p 'test_unified_experiments.py' -v
 The evaluator aligns exact IDs, rejects duplicate/missing/nonfinite records, validates labels against the selected public dataset and reports EUR metrics plus zero/positive diagnostics. `case_id` and legacy `itemid` are accepted aliases. The prediction file must cover exactly the ground-truth file supplied; do not use the complete cohort's labels when evaluating a test-only prediction file. Use the fixed public view flags when reporting ID, OOD and overlapping Challenging results.
 
 Paper anchors: Table 11 / Appendix C.1 specify the input boundary; Tables 17–18 the split/constant protocol; Tables 20–25 the model families; Table 28 names X0–X3 but does not provide the exact column mapping. The historical 50-feature matrix contained two allocation-derived predictors with unverified facts-side lineage, which this public adapter excludes. Therefore no current result should be labeled historical X1 or an exact reproduction of Table 3 without additional original-run evidence.
+

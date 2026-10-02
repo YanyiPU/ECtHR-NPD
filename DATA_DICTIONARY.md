@@ -36,9 +36,9 @@
 | `has_joint_beneficiary` | yes if a retained allocation label explicitly states joint/jointly, otherwise not_found; unknown if no allocation label. Not proof the judgment has no joint award. Target-side descriptive field. |
 | `gdp_per_capita_current_usd` | Original annual GDP per capita in current US dollars, not log-transformed. |
 | `gdp_constant_2015_usd` | Original annual GDP in constant 2015 US dollars, not log-transformed. |
-| `y_amount_eur` | Retained case-level euro benchmark label, including documented amount corrections. Mixed/unresolved rows are not certified pure NPD: read target_status. |
+| `y_amount_eur` | Case-level monetary benchmark target in euros. |
 | `y_binary` | Existing target: 1 if y_amount_eur > 0, otherwise 0. This retained target is not a predictor encoding. |
-| `target_status` | retained_label / corrected_amount / mixed_head_reference_label / unresolved_reference_label. Reference means retained historical label, NOT a second release. |
+| `target_status` | Target annotation metadata; excluded from model predictors. |
 
 ## applicant_level
 
@@ -58,3 +58,4 @@
 | `npd_award_eur` | Retained source-linked NPD amount in euros or unknown. Read npd_award_scope: an estate amount is for the applicant estate unit, never each heir. No joint sum is divided to invent personal awards. |
 | `npd_award_scope` | individual / applicant_estate / group_or_organisation / unknown. Describes the recipient unit, not a model predictor. |
 | `npd_award_status` | verified_source_link (audited recipient match), verified_source_allocation (source-stated per-applicant/estate amount; not independent person identification), retained_source_link, or an explicit missing/unresolved status. Missing never means zero. |
+

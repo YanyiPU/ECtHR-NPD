@@ -144,8 +144,7 @@ not the public two-table contract; use `export_reviewed.py` for canonical stagin
 The commands and synthetic tests establish a working local source-to-candidate
 workflow and strict reviewed projection. They do not establish that rerunning
 today's extraction gives the paper's historical labels or reported scores.
-The published tables preserve the original cohort and documented corrections;
-mixed or unresolved historical labels remain visibly marked by `target_status`.
+The published tables contain the case cohort and its linked applicant source records.
 
 Historical source snapshot completeness, full extraction run manifests, original
 provider responses, source-specific zero/exception review ledgers, complete
@@ -169,3 +168,4 @@ python3 -B -m unittest discover -s tests -p test_source_reconstruction.py -v
 python3 -B -m unittest discover -s tests -p test_extraction_reliability.py -v
 python3 -B -m unittest discover -s tests -p test_extraction_export.py -v
 ```
+

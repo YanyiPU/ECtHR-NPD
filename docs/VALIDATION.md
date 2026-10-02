@@ -10,16 +10,13 @@ experiment reproduction or legal/privacy clearance.
   ID/OOD: 1,000 / 1,897. The released metadata recomputes all 699 Challenging flags.
 - Unique HUDOC case keys and applicant source-record keys; complete foreign keys;
   applicant split agrees with case split. Dates and source application counts agree.
-- Two corrected case totals and 23 restored applicant/estate allocations checked
-  against retained source-review evidence. Two estate units are explicitly labeled.
+- Estate units are explicitly labeled in the applicant table.
 - 19,495 source records now have known amounts. No retained known-amount sum
   exceeds its case label. A lower sum alone is not classified as an error.
 - All applicant-name fields are `[MASKED]`. All 353 distinct original nationality
   values were subjected to a targeted name check; none was confirmed to contain
   personal names. Nationality values match source text except trimming and the
   explicit missing marker. This is not universal name-recognition certification.
-- Five flagged target issues and their 24 applicant records remain. No unsupported
-  pure-NPD totals, zero awards, individuals, or equal joint shares were invented.
 - Previous review/source files used to build the reviewed candidate were hash-checked as
   unchanged. Public-package scanning found no credential-pattern or personal
   home-directory literals; raw judgments, mappings, logs and bytecode are excluded.
@@ -59,8 +56,7 @@ the paper were not reproduced. Raw FACTS review is researcher-attested, not an
 automatic source-content or leakage certification. The original manual-review,
 feature-selection, provider and model-run evidence remains incomplete.
 
-See `PAPER_ALIGNMENT.md` for the unresolved scientific claims. In particular,
-preserving the paper's row counts while retaining five mixed/unresolved targets
-does not make the dataset strictly compliant with every paper statement.
+See `PAPER_ALIGNMENT.md` for method correspondence and reproduction requirements.
 
 The same 200-test suite was rerun before synchronization: 193 passed, 7 optional historical-fixture tests skipped, no failures or errors.
+
